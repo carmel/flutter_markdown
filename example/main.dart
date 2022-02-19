@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/src/widget.dart';
-import 'package:flutter_markdown/src/render/extension_set.dart' as md;
-import 'package:flutter_markdown/src/render/block_parser.dart' as md;
-import 'package:flutter_markdown/src/render/inline_parser.dart' as md;
+import 'package:flutter_markdown/markdown.dart';
+// import 'package:flutter_markdown/src/render/extension_set.dart' as md;
+// import 'package:flutter_markdown/src/render/block_parser.dart' as md;
+// import 'package:flutter_markdown/src/render/inline_parser.dart' as md;
+// import 'package:flutter_markdown/src/style_sheet.dart';
 
 import 'supscript.dart';
 
@@ -31,6 +32,50 @@ class MyApp extends StatelessWidget {
 7. 神就造出[1|note/1/1/7/0/1]天空，将天空以下的水，与天空以上的[a|bead/1/1/7/0/a]水分开；事就这样成了。
 
 8. 神称天空为天；[a|bead/1/1/8/0/a]有晚上，有早晨，是第二[1|note/1/1/8/0/1]日。
+
+[vue3-markdown](https://www.npmjs.com/package/vue3-markdown) ![RUNOOB 图标](http://static.runoob.com/images/runoob-logo.png)
+
+
+![RUNOOB](http://via.placeholder.com/350x150)
+
+
+## Markdown Basic Syntax
+
+I just love **bold text**. Italicized text is the _cat's meow_. At the command prompt, type `nano`.
+
+My favorite markdown editor is [vue3-markdown](https://www.npmjs.com/package/vue3-markdown).
+
+1. First item
+2. Second item
+3. Third item
+
+> Dorothy followed her through many of the beautiful rooms in her castle.
+
+```js
+import { ref } from 'vue'
+import { VMarkdownEditor } from 'vue3-markdown'
+import 'vue3-markdown/dist/style.css'
+
+const handleUpload = (file) => {
+  console.log(file)
+  return 'https://i.postimg.cc/52qCzTVw/pngwing-com.png'
+}
+```
+
+## GFM Extended Syntax
+
+Automatic URL Linking: https://www.npmjs.com/package/vue3-markdown
+
+~~The world is flat.~~ We now know that the world is round.
+
+- [x] Write the press release
+- [ ] Update the website
+- [ ] Contact the media
+
+| Syntax    | Description |
+| --------- | ----------- |
+| Header    | Title       |
+| Paragraph | Text        |
 """;
 
   // This widget is the root of your application.
@@ -41,23 +86,105 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
       ),
       home: Scaffold(
-        appBar: AppBar(
-          title: const Text("Flutter Markdown Demo"),
-        ),
-        body: Markdown(
+        body: PositionableMarkdown(
           data: _data,
-          extensionSet: md.ExtensionSet(
-            <md.BlockSyntax>[],
-            <md.InlineSyntax>[
+          onTapLink: (text, href, title) {
+            print('onTapLink>>>>>>>>>>>>>>>>>');
+            print(text);
+            print(href);
+            print('<<<<<<<<<<<<<<<<<onTapLink');
+          },
+          onTapImage: (url, tag) {
+            print('onTapImage>>>>>>>>>>>>>>>>>');
+            print(url);
+            print(tag);
+            print('<<<<<<<<<<<<<<<<<onTapImage');
+
+            // Navigator.push(
+            //   context,
+            //   MaterialPageRoute(
+            //     builder: (BuildContext context) {
+            //       return ImagePreview(
+            //         url: url,
+            //         tag: tag ?? '',
+            //       );
+            //     },
+            //   ),
+            // );
+          },
+          extensionSet: ExtensionSet(
+            <BlockSyntax>[],
+            <InlineSyntax>[
               SuperscriptSyntax(),
             ],
           ),
-          blockSyntaxes: md.ExtensionSet.gitHubFlavored.blockSyntaxes,
+          blockSyntaxes: ExtensionSet.gitHubFlavored.blockSyntaxes,
           builders: <String, MarkdownElementBuilder>{
             'sup': SuperscriptBuilder((text, title) {
               print(title);
             }),
           },
+          baseUrl: '',
+          controller: AutoScrollController(),
+          padding: const EdgeInsets.only(top: 4, bottom: 24, left: 15, right: 15),
+          appbar: SliverAppBar(
+            floating: true,
+            elevation: 4,
+            automaticallyImplyLeading: false,
+            // backgroundColor: Color(0xf0EBEDEE),
+            // expandedHeight: 120.0,
+            // iconTheme: IconThemeData(color: Colors.black38),
+            leading: IconButton(
+                icon: const Icon(Icons.arrow_back_ios, color: Colors.black38), onPressed: () => Navigator.pop(context)),
+            title: const Text('flutter markdown demo'),
+            // bottom: Layout.appBar(ctx: context, title: 'testw'),
+            actions: <Widget>[
+              // IconButton(icon: Icon(Icons.settings), disabledColor: Colors.grey, onPressed: null),
+              PopupMenuButton(
+                  icon: const Icon(Icons.more_vert),
+                  padding: EdgeInsets.zero,
+                  elevation: 5,
+                  itemBuilder: (_) => <PopupMenuEntry<int>>[
+                        const PopupMenuDivider(
+                          height: 0.5,
+                        ),
+                        const PopupMenuItem<int>(
+                            value: 1,
+                            child: ListTile(
+                              dense: true,
+                              leading: Icon(Icons.sync),
+                              title: Text('同步更新'),
+                            )),
+                        const PopupMenuDivider(
+                          height: 0.5,
+                        ),
+                        const PopupMenuItem<int>(
+                            value: 2,
+                            child: ListTile(
+                              dense: true,
+                              leading: Icon(Icons.bookmark_add_outlined),
+                              title: Text('保存书签'),
+                            )),
+                      ],
+                  onSelected: (value) {
+                    switch (value) {
+                      case 1:
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('同步更新')));
+                        break;
+                      case 2:
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('保存书签')));
+                        break;
+                    }
+                  }),
+            ],
+          ),
+          notifyHandler: (max, offset) {},
+          styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+            textScaleFactor: 1.3,
+            p: const TextStyle(fontSize: 24),
+            listBullet: const TextStyle(fontSize: 24),
+            checkbox: const TextStyle(fontSize: 24),
+          ),
         ),
       ),
     );

@@ -2,40 +2,40 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-typedef Resolver = Node? Function(String name, [String? title]);
+typedef Resolver = MarkedNode? Function(String name, [String? title]);
 
 /// Base class for any AST item.
 ///
-/// Roughly corresponds to Node in the DOM. Will be either an Element or Text.
-abstract class Node {
+/// Roughly corresponds to MarkedNode in the DOM. Will be either an MarkedElement or Text.
+abstract class MarkedNode {
   void accept(NodeVisitor visitor);
 
   String get textContent;
 }
 
 /// A named tag that can contain other nodes.
-class Element implements Node {
+class MarkedElement implements MarkedNode {
   final String tag;
-  final List<Node>? children;
+  final List<MarkedNode>? children;
   final Map<String, String> attributes;
   String? generatedId;
 
-  /// Instantiates a [tag] Element with [children].
-  Element(this.tag, this.children) : attributes = <String, String>{};
+  /// Instantiates a [tag] MarkedElement with [children].
+  MarkedElement(this.tag, this.children) : attributes = <String, String>{};
 
-  /// Instantiates an empty, self-closing [tag] Element.
-  Element.empty(this.tag)
+  /// Instantiates an empty, self-closing [tag] MarkedElement.
+  MarkedElement.empty(this.tag)
       : children = null,
         attributes = {};
 
-  /// Instantiates a [tag] Element with no [children].
-  Element.withTag(this.tag)
+  /// Instantiates a [tag] MarkedElement with no [children].
+  MarkedElement.withTag(this.tag)
       : children = [],
         attributes = {};
 
-  /// Instantiates a [tag] Element with a single Text child.
-  Element.text(this.tag, String text)
-      : children = [Text(text)],
+  /// Instantiates a [tag] MarkedElement with a single Text child.
+  MarkedElement.text(this.tag, String text)
+      : children = [MarkedText(text)],
         attributes = {};
 
   /// Whether this element is self-closing.
@@ -55,15 +55,15 @@ class Element implements Node {
 
   @override
   String get textContent {
-    return (children ?? []).map((Node? child) => child!.textContent).join('');
+    return (children ?? []).map((MarkedNode? child) => child!.textContent).join('');
   }
 }
 
 /// A plain text element.
-class Text implements Node {
+class MarkedText implements MarkedNode {
   final String text;
 
-  Text(this.text);
+  MarkedText(this.text);
 
   @override
   void accept(NodeVisitor visitor) => visitor.visitText(this);
@@ -78,7 +78,7 @@ class Text implements Node {
 /// These placeholder nodes should only remain in place while the block nodes
 /// of a document are still being parsed, in order to gather all reference link
 /// definitions.
-class UnparsedContent implements Node {
+class UnparsedContent implements MarkedNode {
   @override
   final String textContent;
 
@@ -93,17 +93,17 @@ class UnparsedContent implements Node {
 /// Renderers or other AST transformers should implement this.
 abstract class NodeVisitor {
   /// Called when a Text node has been reached.
-  void visitText(Text text);
+  void visitText(MarkedText text);
 
-  /// Called when an Element has been reached, before its children have been
+  /// Called when an MarkedElement has been reached, before its children have been
   /// visited.
   ///
   /// Returns `false` to skip its children.
-  bool visitElementBefore(Element element);
+  bool visitElementBefore(MarkedElement element);
 
-  /// Called when an Element has been reached, after its children have been
+  /// Called when an MarkedElement has been reached, after its children have been
   /// visited.
   ///
   /// Will not be called if [visitElementBefore] returns `false`.
-  void visitElementAfter(Element element);
+  void visitElementAfter(MarkedElement element);
 }

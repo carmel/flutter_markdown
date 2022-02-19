@@ -1,8 +1,7 @@
-// Copyright (c) 2017, the Dart project authors.  Please see the AUTHORS file
-// for details. All rights reserved. Use of this source code is governed by a
-// BSD-style license that can be found in the LICENSE file.
+import 'package:charcode/charcode.dart';
 
 import 'ast.dart';
+import 'block_instance.dart';
 import 'block_parser.dart';
 import 'extension_set.dart';
 import 'inline_parser.dart';
@@ -11,10 +10,36 @@ import 'inline_parser.dart';
 class Document {
   final Map<String, LinkReference> linkReferences = <String, LinkReference>{};
   final ExtensionSet extensionSet;
-  final Resolver? linkResolver;
-  final Resolver? imageLinkResolver;
-  final _blockSyntaxes = <BlockSyntax>{};
-  final _inlineSyntaxes = <InlineSyntax>{};
+  // final Resolver? linkResolver;
+  final _blockSyntaxes = <BlockSyntax>{
+    const EmptyBlockSyntax(),
+    const SetextHeaderSyntax(),
+    const ImageSyntax(),
+    const HeaderSyntax(),
+    // const CodeBlockSyntax(),
+    const FencedCodeBlockSyntax(),
+    const BlockquoteSyntax(),
+    const HorizontalRuleSyntax(),
+    const UnorderedListSyntax(),
+    const OrderedListSyntax(),
+    const ParagraphSyntax(),
+  };
+  final _inlineSyntaxes = <InlineSyntax>{
+    EmailAutolinkSyntax(),
+    AutolinkSyntax(),
+    LineBreakSyntax(),
+    // Allow any punctuation to be escaped.
+    EscapeSyntax(),
+    // "*" surrounded by spaces is left alone.
+    TextSyntax(r' \* ', startCharacter: $space),
+    // "_" surrounded by spaces is left alone.
+    TextSyntax(r' _ ', startCharacter: $space),
+    // Parse "**strong**" and "*emphasis*" tags.
+    TagSyntax(r'\*+', requiresDelimiterRun: true),
+    // Parse "__strong__" and "_emphasis_" tags.
+    TagSyntax(r'_+', requiresDelimiterRun: true),
+    CodeSyntax(),
+  };
 
   Iterable<BlockSyntax> get blockSyntaxes => _blockSyntaxes;
 
@@ -24,8 +49,7 @@ class Document {
     Iterable<BlockSyntax>? blockSyntaxes,
     Iterable<InlineSyntax>? inlineSyntaxes,
     ExtensionSet? extensionSet,
-    this.linkResolver,
-    this.imageLinkResolver,
+    // this.linkResolver,
   }) : extensionSet = extensionSet ?? ExtensionSet.commonMark {
     _blockSyntaxes
       ..addAll(blockSyntaxes ?? [])
@@ -36,24 +60,24 @@ class Document {
   }
 
   /// Parses the given [lines] of Markdown to a series of AST nodes.
-  List<Node> parseLines(List<String> lines) {
-    var nodes = BlockParser(lines, this).parseLines();
+  List<MarkedNode> parseLines(List<String> lines) {
+    final nodes = BlockParser(lines, this).parseLines();
     _parseInlineContent(nodes);
     return nodes;
   }
 
   /// Parses the given inline Markdown [text] to a series of AST nodes.
-  List<Node> parseInline(String? text) => InlineParser(text, this).parse();
+  List<MarkedNode> parseInline(String text) => InlineParser(text, this).parse();
 
-  void _parseInlineContent(List<Node> nodes) {
+  void _parseInlineContent(List<MarkedNode> nodes) {
     for (var i = 0; i < nodes.length; i++) {
-      var node = nodes[i];
+      final node = nodes[i];
       if (node is UnparsedContent) {
-        var inlineNodes = parseInline(node.textContent);
+        final inlineNodes = parseInline(node.textContent);
         nodes.removeAt(i);
         nodes.insertAll(i, inlineNodes);
         i += inlineNodes.length - 1;
-      } else if (node is Element && node.children != null) {
+      } else if (node is MarkedElement && node.children != null) {
         _parseInlineContent(node.children!);
       }
     }

@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/src/render/inline_parser.dart' as md;
-import 'package:flutter_markdown/src/render/ast.dart' as md;
-import 'package:flutter_markdown/src/widget.dart';
+import 'package:flutter_markdown/markdown.dart';
 
-class SuperscriptSyntax extends md.InlineSyntax {
+class SuperscriptSyntax extends InlineSyntax {
   SuperscriptSyntax() : super(r'\[([0-9]+|[a-z])\|([^\]]+)\]');
 
   @override
-  bool onMatch(md.InlineParser parser, Match match) {
-    final sup = md.Element.text('sup', match[1]!);
+  bool onMatch(InlineParser parser, Match match) {
+    final sup = MarkedElement.text('sup', match[1]!);
     sup.attributes['title'] = match[2]!;
-    // final sup = md.Element.withTag('sup');
-    // final anchor = md.Element.text('a', match[1]!);
+    // final sup = Element.withTag('sup');
+    // final anchor = Element.text('a', match[1]!);
     // anchor.attributes['href'] = Uri.encodeFull('www.baidu.com');
     // sup.children!.add(anchor);
     parser.addNode(sup);
@@ -63,12 +61,12 @@ class SuperscriptBuilder extends MarkdownElementBuilder {
 
   SuperscriptBuilder(this.onTabSup);
   @override
-  Widget visitElementAfter(md.Element element, TextStyle? preferredStyle) {
-    final String textContent = element.textContent;
-    String text = '';
-    for (int i = 0; i < textContent.length; i++) {
-      text += _supscripts[textContent[i]] ?? '';
-    }
+  InlineSpan visitElementAfter(MarkedElement element, TextStyle? preferredStyle) {
+    // final String textContent = element.textContent;
+    // String text = '';
+    // for (int i = 0; i < textContent.length; i++) {
+    //   text += _supscripts[textContent[i]] ?? '';
+    // }
 
     // return SelectableText.rich(TextSpan(text: text));
     // return SelectableText.rich(
@@ -87,9 +85,19 @@ class SuperscriptBuilder extends MarkdownElementBuilder {
     //   ),
     // );
 
-    return Text(
-      text,
-      style: const TextStyle(fontSize: 10),
+    return WidgetSpan(
+      child: Transform.translate(
+        offset: const Offset(0.0, -10.0),
+        child: InkWell(
+          onTap: () {
+            print(element.attributes['title']);
+          },
+          child: Text(
+            element.textContent,
+            style: const TextStyle(fontSize: 15, color: Colors.red),
+          ),
+        ),
+      ),
     );
 
     // return Text.rich(

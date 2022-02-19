@@ -1,3 +1,4 @@
+import 'block_instance.dart';
 import 'block_parser.dart';
 import 'inline_parser.dart';
 
@@ -47,7 +48,6 @@ class ExtensionSet {
         const FencedCodeBlockSyntax(),
         const HeaderWithIdSyntax(),
         const SetextHeaderWithIdSyntax(),
-        const TableSyntax(),
       ],
     ),
     List<InlineSyntax>.unmodifiable(
@@ -63,7 +63,6 @@ class ExtensionSet {
     List<BlockSyntax>.unmodifiable(
       <BlockSyntax>[
         const FencedCodeBlockSyntax(),
-        const TableSyntax(),
       ],
     ),
     List<InlineSyntax>.unmodifiable(

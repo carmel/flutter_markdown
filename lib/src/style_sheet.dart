@@ -13,6 +13,7 @@ class MarkdownStyleSheet {
     this.p,
     this.pPadding,
     this.code,
+    this.imgPadding,
     this.h1,
     this.h1Padding,
     this.h2,
@@ -35,13 +36,8 @@ class MarkdownStyleSheet {
     this.listIndent,
     this.listBullet,
     this.listBulletPadding,
-    this.tableHead,
-    this.tableBody,
-    this.tableHeadAlign,
-    this.tableBorder,
-    this.tableColumnWidth,
-    this.tableCellsPadding,
-    this.tableCellsDecoration,
+    this.tableColumnSpacing,
+    this.tableStripeColor,
     this.blockquotePadding,
     this.blockquoteDecoration,
     this.codeblockPadding,
@@ -77,9 +73,6 @@ class MarkdownStyleSheet {
           'blockquote': blockquote,
           'img': img,
           'table': p,
-          'th': tableHead,
-          'tr': tableBody,
-          'td': tableBody,
         };
 
   /// Creates a [MarkdownStyleSheet] from the [TextStyle]s in the provided [ThemeData].
@@ -94,6 +87,8 @@ class MarkdownStyleSheet {
         fontFamily: 'monospace',
         fontSize: theme.textTheme.bodyText2!.fontSize! * 0.85,
       ),
+      img: theme.textTheme.bodyText2,
+      imgPadding: EdgeInsets.zero,
       h1: theme.textTheme.headline5,
       h1Padding: EdgeInsets.zero,
       h2: theme.textTheme.headline6,
@@ -110,7 +105,6 @@ class MarkdownStyleSheet {
       strong: const TextStyle(fontWeight: FontWeight.bold),
       del: const TextStyle(decoration: TextDecoration.lineThrough),
       blockquote: theme.textTheme.bodyText2,
-      img: theme.textTheme.bodyText2,
       checkbox: theme.textTheme.bodyText2!.copyWith(
         color: theme.primaryColor,
       ),
@@ -118,16 +112,8 @@ class MarkdownStyleSheet {
       listIndent: 24.0,
       listBullet: theme.textTheme.bodyText2,
       listBulletPadding: const EdgeInsets.only(right: 4),
-      tableHead: const TextStyle(fontWeight: FontWeight.w600),
-      tableBody: theme.textTheme.bodyText2,
-      tableHeadAlign: TextAlign.center,
-      tableBorder: TableBorder.all(
-        color: theme.dividerColor,
-        width: 1,
-      ),
-      tableColumnWidth: const FlexColumnWidth(),
-      tableCellsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      tableCellsDecoration: const BoxDecoration(),
+      tableColumnSpacing: 0,
+      tableStripeColor: const Color(0xFFCBCBCB),
       blockquotePadding: const EdgeInsets.all(8.0),
       blockquoteDecoration: BoxDecoration(
         color: Colors.blue.shade100,
@@ -154,9 +140,7 @@ class MarkdownStyleSheet {
     assert(theme.textTheme.textStyle.fontSize != null);
     return MarkdownStyleSheet(
       a: theme.textTheme.textStyle.copyWith(
-        color: theme.brightness == Brightness.dark
-            ? CupertinoColors.link.darkColor
-            : CupertinoColors.link.color,
+        color: theme.brightness == Brightness.dark ? CupertinoColors.link.darkColor : CupertinoColors.link.color,
       ),
       p: theme.textTheme.textStyle,
       pPadding: EdgeInsets.zero,
@@ -167,6 +151,8 @@ class MarkdownStyleSheet {
         fontFamily: 'monospace',
         fontSize: theme.textTheme.textStyle.fontSize! * 0.85,
       ),
+      img: theme.textTheme.textStyle,
+      imgPadding: EdgeInsets.zero,
       h1: theme.textTheme.textStyle.copyWith(
         fontWeight: FontWeight.w500,
         fontSize: theme.textTheme.textStyle.fontSize! + 10,
@@ -206,7 +192,6 @@ class MarkdownStyleSheet {
         decoration: TextDecoration.lineThrough,
       ),
       blockquote: theme.textTheme.textStyle,
-      img: theme.textTheme.textStyle,
       checkbox: theme.textTheme.textStyle.copyWith(
         color: theme.primaryColor,
       ),
@@ -214,19 +199,8 @@ class MarkdownStyleSheet {
       listIndent: 24,
       listBullet: theme.textTheme.textStyle,
       listBulletPadding: const EdgeInsets.only(right: 4),
-      tableHead: theme.textTheme.textStyle.copyWith(
-        fontWeight: FontWeight.w600,
-      ),
-      tableBody: theme.textTheme.textStyle,
-      tableHeadAlign: TextAlign.center,
-      tableBorder: TableBorder.all(color: CupertinoColors.separator, width: 0),
-      tableColumnWidth: const FlexColumnWidth(),
-      tableCellsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      tableCellsDecoration: BoxDecoration(
-        color: theme.brightness == Brightness.dark
-            ? CupertinoColors.systemGrey6.darkColor
-            : CupertinoColors.systemGrey6.color,
-      ),
+      tableColumnSpacing: 0,
+      tableStripeColor: const Color(0xFFCBCBCB),
       blockquotePadding: const EdgeInsets.all(16),
       blockquoteDecoration: BoxDecoration(
         color: theme.brightness == Brightness.dark
@@ -274,6 +248,8 @@ class MarkdownStyleSheet {
         fontFamily: 'monospace',
         fontSize: theme.textTheme.bodyText2!.fontSize! * 0.85,
       ),
+      img: theme.textTheme.bodyText2,
+      imgPadding: EdgeInsets.zero,
       h1: theme.textTheme.headline2,
       h1Padding: EdgeInsets.zero,
       h2: theme.textTheme.headline3,
@@ -290,7 +266,6 @@ class MarkdownStyleSheet {
       strong: const TextStyle(fontWeight: FontWeight.bold),
       del: const TextStyle(decoration: TextDecoration.lineThrough),
       blockquote: theme.textTheme.bodyText2,
-      img: theme.textTheme.bodyText2,
       checkbox: theme.textTheme.bodyText2!.copyWith(
         color: theme.primaryColor,
       ),
@@ -298,15 +273,8 @@ class MarkdownStyleSheet {
       listIndent: 24.0,
       listBullet: theme.textTheme.bodyText2,
       listBulletPadding: const EdgeInsets.only(right: 4),
-      tableHead: const TextStyle(fontWeight: FontWeight.w600),
-      tableBody: theme.textTheme.bodyText2,
-      tableHeadAlign: TextAlign.center,
-      tableBorder: TableBorder.all(
-        color: theme.dividerColor,
-      ),
-      tableColumnWidth: const FlexColumnWidth(),
-      tableCellsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      tableCellsDecoration: const BoxDecoration(),
+      tableColumnSpacing: 0,
+      tableStripeColor: const Color(0xFFCBCBCB),
       blockquotePadding: const EdgeInsets.all(8.0),
       blockquoteDecoration: BoxDecoration(
         color: Colors.blue.shade100,
@@ -335,6 +303,7 @@ class MarkdownStyleSheet {
     TextStyle? p,
     EdgeInsets? pPadding,
     TextStyle? code,
+    EdgeInsets? imgPadding,
     TextStyle? h1,
     EdgeInsets? h1Padding,
     TextStyle? h2,
@@ -357,13 +326,8 @@ class MarkdownStyleSheet {
     double? listIndent,
     TextStyle? listBullet,
     EdgeInsets? listBulletPadding,
-    TextStyle? tableHead,
-    TextStyle? tableBody,
-    TextAlign? tableHeadAlign,
-    TableBorder? tableBorder,
-    TableColumnWidth? tableColumnWidth,
-    EdgeInsets? tableCellsPadding,
-    Decoration? tableCellsDecoration,
+    double? tableColumnSpacing,
+    Color? tableStripeColor,
     EdgeInsets? blockquotePadding,
     Decoration? blockquoteDecoration,
     EdgeInsets? codeblockPadding,
@@ -409,19 +373,13 @@ class MarkdownStyleSheet {
       listIndent: listIndent ?? this.listIndent,
       listBullet: listBullet ?? this.listBullet,
       listBulletPadding: listBulletPadding ?? this.listBulletPadding,
-      tableHead: tableHead ?? this.tableHead,
-      tableBody: tableBody ?? this.tableBody,
-      tableHeadAlign: tableHeadAlign ?? this.tableHeadAlign,
-      tableBorder: tableBorder ?? this.tableBorder,
-      tableColumnWidth: tableColumnWidth ?? this.tableColumnWidth,
-      tableCellsPadding: tableCellsPadding ?? this.tableCellsPadding,
-      tableCellsDecoration: tableCellsDecoration ?? this.tableCellsDecoration,
+      tableColumnSpacing: tableColumnSpacing ?? this.tableColumnSpacing,
+      tableStripeColor: tableStripeColor ?? this.tableStripeColor,
       blockquotePadding: blockquotePadding ?? this.blockquotePadding,
       blockquoteDecoration: blockquoteDecoration ?? this.blockquoteDecoration,
       codeblockPadding: codeblockPadding ?? this.codeblockPadding,
       codeblockDecoration: codeblockDecoration ?? this.codeblockDecoration,
-      horizontalRuleDecoration:
-          horizontalRuleDecoration ?? this.horizontalRuleDecoration,
+      horizontalRuleDecoration: horizontalRuleDecoration ?? this.horizontalRuleDecoration,
       textAlign: textAlign ?? this.textAlign,
       h1Align: h1Align ?? this.h1Align,
       h2Align: h2Align ?? this.h2Align,
@@ -470,13 +428,8 @@ class MarkdownStyleSheet {
       listIndent: other.listIndent,
       listBullet: listBullet!.merge(other.listBullet),
       listBulletPadding: other.listBulletPadding,
-      tableHead: tableHead!.merge(other.tableHead),
-      tableBody: tableBody!.merge(other.tableBody),
-      tableHeadAlign: other.tableHeadAlign,
-      tableBorder: other.tableBorder,
-      tableColumnWidth: other.tableColumnWidth,
-      tableCellsPadding: other.tableCellsPadding,
-      tableCellsDecoration: other.tableCellsDecoration,
+      tableColumnSpacing: other.tableColumnSpacing,
+      tableStripeColor: other.tableStripeColor,
       blockquotePadding: other.blockquotePadding,
       blockquoteDecoration: other.blockquoteDecoration,
       codeblockPadding: other.codeblockPadding,
@@ -508,6 +461,8 @@ class MarkdownStyleSheet {
 
   /// The [TextStyle] to use for `code` elements.
   final TextStyle? code;
+
+  final EdgeInsets? imgPadding;
 
   /// The [TextStyle] to use for `h1` elements.
   final TextStyle? h1;
@@ -575,26 +530,9 @@ class MarkdownStyleSheet {
   /// The padding to use for bullets.
   final EdgeInsets? listBulletPadding;
 
-  /// The [TextStyle] to use for `th` elements.
-  final TextStyle? tableHead;
+  final double? tableColumnSpacing;
 
-  /// The [TextStyle] to use for `td` elements.
-  final TextStyle? tableBody;
-
-  /// The [TextAlign] to use for `th` elements.
-  final TextAlign? tableHeadAlign;
-
-  /// The [TableBorder] to use for `table` elements.
-  final TableBorder? tableBorder;
-
-  /// The [TableColumnWidth] to use for `th` and `td` elements.
-  final TableColumnWidth? tableColumnWidth;
-
-  /// The padding to use for `th` and `td` elements.
-  final EdgeInsets? tableCellsPadding;
-
-  /// The decoration to use for `th` and `td` elements.
-  final Decoration? tableCellsDecoration;
+  final Color? tableStripeColor;
 
   /// The padding to use for `blockquote` elements.
   final EdgeInsets? blockquotePadding;
@@ -665,6 +603,7 @@ class MarkdownStyleSheet {
         typedOther.p == p &&
         typedOther.pPadding == pPadding &&
         typedOther.code == code &&
+        typedOther.imgPadding == imgPadding &&
         typedOther.h1 == h1 &&
         typedOther.h1Padding == h1Padding &&
         typedOther.h2 == h2 &&
@@ -687,13 +626,8 @@ class MarkdownStyleSheet {
         typedOther.listIndent == listIndent &&
         typedOther.listBullet == listBullet &&
         typedOther.listBulletPadding == listBulletPadding &&
-        typedOther.tableHead == tableHead &&
-        typedOther.tableBody == tableBody &&
-        typedOther.tableHeadAlign == tableHeadAlign &&
-        typedOther.tableBorder == tableBorder &&
-        typedOther.tableColumnWidth == tableColumnWidth &&
-        typedOther.tableCellsPadding == tableCellsPadding &&
-        typedOther.tableCellsDecoration == tableCellsDecoration &&
+        typedOther.tableColumnSpacing == tableColumnSpacing &&
+        typedOther.tableStripeColor == tableStripeColor &&
         typedOther.blockquotePadding == blockquotePadding &&
         typedOther.blockquoteDecoration == blockquoteDecoration &&
         typedOther.codeblockPadding == codeblockPadding &&
@@ -721,6 +655,7 @@ class MarkdownStyleSheet {
       p,
       pPadding,
       code,
+      imgPadding,
       h1,
       h1Padding,
       h2,
@@ -743,13 +678,8 @@ class MarkdownStyleSheet {
       listIndent,
       listBullet,
       listBulletPadding,
-      tableHead,
-      tableBody,
-      tableHeadAlign,
-      tableBorder,
-      tableColumnWidth,
-      tableCellsPadding,
-      tableCellsDecoration,
+      tableColumnSpacing,
+      tableStripeColor,
       blockquotePadding,
       blockquoteDecoration,
       codeblockPadding,
