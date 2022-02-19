@@ -514,18 +514,16 @@ class MarkdownBuilder implements NodeVisitor {
       final Wrap wrap = Wrap(
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          SelectableText.rich(
-            TextSpan(children: inline.children),
-          )
+          _buildPadding(
+              textPadding,
+              SelectableText.rich(
+                TextSpan(children: inline.children),
+              )),
         ],
         alignment: blockAlignment,
       );
 
-      if (textPadding == EdgeInsets.zero) {
-        _addBlockChild(wrap);
-      } else {
-        _addBlockChild(_buildPadding(textPadding, wrap));
-      }
+      _addBlockChild(wrap);
 
       _inlines.clear();
     }
@@ -555,12 +553,6 @@ class MarkdownBuilder implements NodeVisitor {
         return styleSheet.blockquoteAlign;
       case 'pre':
         return styleSheet.codeblockAlign;
-      case 'hr':
-        print('Markdown did not handle hr for alignment');
-        break;
-      case 'li':
-        print('Markdown did not handle li for alignment');
-        break;
     }
     return WrapAlignment.start;
   }
@@ -581,6 +573,9 @@ class MarkdownBuilder implements NodeVisitor {
         return styleSheet.h5Padding!;
       case 'h6':
         return styleSheet.h6Padding!;
+      case 'ol':
+      case 'ul':
+        return styleSheet.listPadding!;
     }
     return EdgeInsets.zero;
   }

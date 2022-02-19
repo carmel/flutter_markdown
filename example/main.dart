@@ -181,6 +181,7 @@ Automatic URL Linking: https://www.npmjs.com/package/vue3-markdown
           notifyHandler: (max, offset) {},
           styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
             textScaleFactor: 1.3,
+            listPadding: const EdgeInsets.all(20),
             p: const TextStyle(fontSize: 24),
             listBullet: const TextStyle(fontSize: 24),
             checkbox: const TextStyle(fontSize: 24),

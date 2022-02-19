@@ -14,6 +14,7 @@ class MarkdownStyleSheet {
     this.pPadding,
     this.code,
     this.imgPadding,
+    this.listPadding,
     this.h1,
     this.h1Padding,
     this.h2,
@@ -89,6 +90,7 @@ class MarkdownStyleSheet {
       ),
       img: theme.textTheme.bodyText2,
       imgPadding: EdgeInsets.zero,
+      listPadding: EdgeInsets.zero,
       h1: theme.textTheme.headline5,
       h1Padding: EdgeInsets.zero,
       h2: theme.textTheme.headline6,
@@ -153,6 +155,7 @@ class MarkdownStyleSheet {
       ),
       img: theme.textTheme.textStyle,
       imgPadding: EdgeInsets.zero,
+      listPadding: EdgeInsets.zero,
       h1: theme.textTheme.textStyle.copyWith(
         fontWeight: FontWeight.w500,
         fontSize: theme.textTheme.textStyle.fontSize! + 10,
@@ -304,6 +307,7 @@ class MarkdownStyleSheet {
     EdgeInsets? pPadding,
     TextStyle? code,
     EdgeInsets? imgPadding,
+    EdgeInsets? listPadding,
     TextStyle? h1,
     EdgeInsets? h1Padding,
     TextStyle? h2,
@@ -351,6 +355,7 @@ class MarkdownStyleSheet {
       p: p ?? this.p,
       pPadding: pPadding ?? this.pPadding,
       code: code ?? this.code,
+      listPadding: listPadding ?? this.listPadding,
       h1: h1 ?? this.h1,
       h1Padding: h1Padding ?? this.h1Padding,
       h2: h2 ?? this.h2,
@@ -406,6 +411,7 @@ class MarkdownStyleSheet {
       p: p!.merge(other.p),
       pPadding: other.pPadding,
       code: code!.merge(other.code),
+      listPadding: other.listPadding,
       h1: h1!.merge(other.h1),
       h1Padding: other.h1Padding,
       h2: h2!.merge(other.h2),
@@ -463,6 +469,7 @@ class MarkdownStyleSheet {
   final TextStyle? code;
 
   final EdgeInsets? imgPadding;
+  final EdgeInsets? listPadding;
 
   /// The [TextStyle] to use for `h1` elements.
   final TextStyle? h1;
@@ -604,6 +611,7 @@ class MarkdownStyleSheet {
         typedOther.pPadding == pPadding &&
         typedOther.code == code &&
         typedOther.imgPadding == imgPadding &&
+        typedOther.listPadding == listPadding &&
         typedOther.h1 == h1 &&
         typedOther.h1Padding == h1Padding &&
         typedOther.h2 == h2 &&
@@ -656,6 +664,7 @@ class MarkdownStyleSheet {
       pPadding,
       code,
       imgPadding,
+      listPadding,
       h1,
       h1Padding,
       h2,
