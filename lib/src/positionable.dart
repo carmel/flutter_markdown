@@ -78,16 +78,15 @@ class PositionableMarkdown extends Markdown {
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, i) {
-                  return children![i];
-                  // if (children![i] is! SizedBox) {
-                  //   return AutoScrollTag(
-                  //     key: ValueKey(i),
-                  //     controller: controller,
-                  //     index: i + 1,
-                  //     child: children[i],
-                  //   );
-                  // }
-                  // return const SizedBox();
+                  if (children![i] is! SizedBox) {
+                    return AutoScrollTag(
+                      key: ValueKey(i),
+                      controller: controller,
+                      index: i + 1,
+                      child: children[i],
+                    );
+                  }
+                  return const SizedBox();
                 },
                 childCount: children?.length,
               ),
