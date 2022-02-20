@@ -152,7 +152,6 @@ abstract class MarkdownWidget extends StatefulWidget {
     required this.data,
     required this.baseUrl,
     required this.onTapImage,
-    this.selectable = false,
     this.styleSheet,
     this.styleSheetTheme = MarkdownStyleSheetBaseTheme.material,
     this.syntaxHighlighter,
@@ -174,11 +173,6 @@ abstract class MarkdownWidget extends StatefulWidget {
   final String data;
 
   final String baseUrl;
-
-  /// If true, the text is selectable.
-  ///
-  /// Defaults to false.
-  final bool selectable;
 
   /// The styles to use when displaying the Markdown.
   ///
@@ -402,7 +396,6 @@ class Markdown extends MarkdownWidget {
           key: key,
           data: data,
           baseUrl: baseUrl,
-          selectable: selectable,
           styleSheet: styleSheet,
           styleSheetTheme: styleSheetTheme,
           syntaxHighlighter: syntaxHighlighter,
