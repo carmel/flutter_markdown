@@ -1,22 +1,19 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
 import 'dart:convert';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'render/inline_parser.dart';
+import 'measure_size.dart';
+import 'parser/inline_parser.dart';
 import 'scroll_tag.dart' show AutoScrollTag;
-import 'scroll_to.dart' show AutoScrollController;
+import 'scroll_to.dart' show AutoScrollController, AutoScrollPosition;
 
 import '_functions_io.dart' if (dart.library.html) '_functions_web.dart';
 import 'builder.dart';
-import 'render/ast.dart';
-import 'render/extension_set.dart' show ExtensionSet;
-import 'render/block_parser.dart' show BlockSyntax;
-import 'render/document.dart' show Document;
+import 'parser/ast.dart';
+import 'parser/extension_set.dart' show ExtensionSet;
+import 'parser/block_parser.dart' show BlockSyntax;
+import 'parser/document.dart' show Document;
 import 'style_sheet.dart' show MarkdownStyleSheet;
 
 /// Signature for callbacks used by [MarkdownWidget] when the user taps a link.
@@ -152,6 +149,8 @@ abstract class MarkdownWidget extends StatefulWidget {
     required this.data,
     required this.baseUrl,
     required this.onTapImage,
+    required this.controller,
+    required this.initialScrollOffset,
     this.styleSheet,
     this.styleSheetTheme = MarkdownStyleSheetBaseTheme.material,
     this.syntaxHighlighter,
@@ -173,6 +172,10 @@ abstract class MarkdownWidget extends StatefulWidget {
   final String data;
 
   final String baseUrl;
+
+  final AutoScrollController controller;
+
+  final int initialScrollOffset;
 
   /// The styles to use when displaying the Markdown.
   ///
@@ -268,6 +271,22 @@ class _MarkdownWidgetState extends State<MarkdownWidget> implements MarkdownBuil
   final List<GestureRecognizer> _recognizers = <GestureRecognizer>[];
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.initialScrollOffset != 0) {
+      WidgetsBinding.instance?.addPostFrameCallback((_) {
+        if (widget.controller.hasClients) {
+          widget.controller.jumpTo(widget.initialScrollOffset * widget.controller.position.maxScrollExtent / 100);
+          // widget.controller.scrollToIndex(
+          //   widget.initialScrollOffset,
+          //   preferPosition: AutoScrollPosition.middle,
+          // );
+        }
+      });
+    }
+  }
+
+  @override
   void didChangeDependencies() {
     _parseMarkdown();
     super.didChangeDependencies();
@@ -284,6 +303,7 @@ class _MarkdownWidgetState extends State<MarkdownWidget> implements MarkdownBuil
   @override
   void dispose() {
     _disposeRecognizers();
+    widget.controller.dispose();
     super.dispose();
   }
 
@@ -369,9 +389,10 @@ class _MarkdownWidgetState extends State<MarkdownWidget> implements MarkdownBuil
 ///  * <https://github.github.com/gfm/>
 class Markdown extends MarkdownWidget {
   /// Creates a scrolling widget that parses and displays Markdown.
-  const Markdown({
+  Markdown({
     Key? key,
-    required this.controller,
+    required AutoScrollController controller,
+    required int initialScrollOffset,
     required String data,
     required String baseUrl,
     required MarkdownTapImageCallback onTapImage,
@@ -396,6 +417,8 @@ class Markdown extends MarkdownWidget {
           key: key,
           data: data,
           baseUrl: baseUrl,
+          controller: controller,
+          initialScrollOffset: initialScrollOffset,
           styleSheet: styleSheet,
           styleSheetTheme: styleSheetTheme,
           syntaxHighlighter: syntaxHighlighter,
@@ -414,11 +437,6 @@ class Markdown extends MarkdownWidget {
 
   final EdgeInsets padding;
 
-  /// An object that can be used to control the position to which this scroll view is scrolled.
-  ///
-  /// See also: [ScrollView.controller]
-  final AutoScrollController controller;
-
   /// How the scroll view should respond to user input.
   ///
   /// See also: [ScrollView.physics]
@@ -429,36 +447,38 @@ class Markdown extends MarkdownWidget {
   ///
   /// See also: [ScrollView.shrinkWrap]
   final bool shrinkWrap;
+  @protected
+  late List<double> widgetHeight;
 
   @override
   Widget build(BuildContext context, List<Widget>? children) {
+    widgetHeight = List.filled(children!.length, 0);
     return SliverPadding(
       padding: padding,
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
           (context, i) {
-            if (children![i] is! SizedBox) {
+            if (children[i] is! SizedBox) {
+              final tagKey = i + 1;
               return AutoScrollTag(
-                key: ValueKey(i),
+                key: ValueKey(tagKey),
                 controller: controller,
-                index: i + 1,
-                child: children[i],
+                index: tagKey,
+                child: MeasureSize(
+                  index: i,
+                  child: children[i],
+                  onChange: (idx, size) {
+                    widgetHeight[idx] = size.height;
+                  },
+                ),
               );
             }
             return const SizedBox();
           },
-          childCount: children?.length,
+          childCount: children.length,
         ),
       ),
     );
-
-    // return ListView(
-    //   padding: padding,
-    //   controller: controller,
-    //   physics: physics,
-    //   shrinkWrap: shrinkWrap,
-    //   children: children!,
-    // );
   }
 }
 

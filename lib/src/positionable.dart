@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'render/inline_parser.dart';
+import 'parser/inline_parser.dart';
 import 'scroll_to.dart' show AutoScrollController;
-import 'scroll_tag.dart' show AutoScrollTag;
 import 'style_sheet.dart' show MarkdownStyleSheet;
 import 'widget.dart'
     show
@@ -15,11 +14,11 @@ import 'widget.dart'
         MarkdownBulletBuilder,
         MarkdownElementBuilder,
         MarkdownListItemCrossAxisAlignment;
-import 'render/block_parser.dart' show BlockSyntax;
-import 'render/extension_set.dart' show ExtensionSet;
+import 'parser/block_parser.dart' show BlockSyntax;
+import 'parser/extension_set.dart' show ExtensionSet;
 
 class PositionableMarkdown extends Markdown {
-  const PositionableMarkdown({
+  PositionableMarkdown({
     Key? key,
     required this.appbar,
     required this.notifyHandler,
@@ -28,6 +27,7 @@ class PositionableMarkdown extends Markdown {
     required MarkdownTapImageCallback onTapImage,
     required MarkdownTapLinkCallback onTapLink,
     required AutoScrollController controller,
+    required int initialScrollOffset,
     EdgeInsets? padding,
     MarkdownStyleSheet? styleSheet,
     MarkdownStyleSheetBaseTheme? styleSheetTheme,
@@ -44,6 +44,7 @@ class PositionableMarkdown extends Markdown {
           data: data,
           baseUrl: baseUrl,
           controller: controller,
+          initialScrollOffset: initialScrollOffset,
           padding: padding ?? const EdgeInsets.only(top: 4, bottom: 24, left: 15, right: 15),
           styleSheet: styleSheet,
           styleSheetTheme: styleSheetTheme,
@@ -60,43 +61,59 @@ class PositionableMarkdown extends Markdown {
         );
 
   final SliverAppBar appbar;
-  final void Function(double, double) notifyHandler;
+  final void Function(double, double, int) notifyHandler;
 
   @override
   Widget build(BuildContext context, List<Widget>? children) {
     return NotificationListener<ScrollNotification>(
       child: CustomScrollView(
         controller: controller,
+        cacheExtent: 1000,
         shrinkWrap: true,
         physics: const ClampingScrollPhysics(),
         slivers: <Widget>[
           appbar,
-          SliverPadding(
-            padding: padding,
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, i) {
-                  if (children![i] is! SizedBox) {
-                    return AutoScrollTag(
-                      key: ValueKey(i),
-                      controller: controller,
-                      index: i + 1,
-                      child: children[i],
-                    );
-                  }
-                  return const SizedBox();
-                },
-                childCount: children?.length,
-              ),
-            ),
+          super.build(
+            context,
+            children,
           ),
         ],
       ),
       onNotification: (ScrollNotification notification) {
-        final double maxScroll = notification.metrics.maxScrollExtent;
-        final offset = notification.metrics.pixels;
+        // bool? isForward;
+        // if (notification is UserScrollNotification) {
+        //   if (notification.direction == ScrollDirection.forward) {
+        //     isForward = true;
+        //   }
+        //   if (notification.direction == ScrollDirection.reverse) {
+        //     isForward = false;
+        //   }
+        // }
         if (notification is ScrollEndNotification) {
-          notifyHandler(maxScroll, offset);
+          final len = super.widgetHeight.length;
+          final offset = notification.metrics.pixels;
+          final max = notification.metrics.maxScrollExtent;
+
+          int index = 0;
+
+          if (offset > max) {
+            index = len;
+          } else {
+            var height = .0;
+            for (var i = 0; i < len; i++) {
+              height += super.widgetHeight[i];
+              if (offset <= height) {
+                index = i + 1;
+                break;
+              }
+            }
+          }
+
+          notifyHandler(
+            max,
+            offset,
+            index,
+          );
         }
         return false;
       },

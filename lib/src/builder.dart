@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'style_sheet.dart' show MarkdownStyleSheet;
 import 'widget.dart';
-import 'render/ast.dart';
+import 'parser/ast.dart';
 
 const List<String> _kBlockTags = <String>[
   'p',

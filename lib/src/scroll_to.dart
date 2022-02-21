@@ -22,29 +22,26 @@ class SimpleAutoScrollController extends ScrollController with AutoScrollControl
   final AxisValueGetter endGetter;
 
   SimpleAutoScrollController(
-      {double initialScrollOffset = 0.0,
-      bool keepScrollOffset = true,
+      {bool keepScrollOffset = true,
       this.viewportBoundaryGetter = defaultViewportBoundaryGetter,
       required this.beginGetter,
       required this.endGetter,
       AutoScrollController? copyTagsFrom,
       String? debugLabel})
-      : super(initialScrollOffset: initialScrollOffset, keepScrollOffset: keepScrollOffset, debugLabel: debugLabel) {
+      : super(keepScrollOffset: keepScrollOffset, debugLabel: debugLabel) {
     if (copyTagsFrom != null) tagMap.addAll(copyTagsFrom.tagMap);
   }
 }
 
 abstract class AutoScrollController implements ScrollController {
   factory AutoScrollController(
-      {double initialScrollOffset = 0.0,
-      bool keepScrollOffset = true,
+      {bool keepScrollOffset = true,
       // double? suggestedRowHeight,
       ViewportBoundaryGetter viewportBoundaryGetter = defaultViewportBoundaryGetter,
       Axis? axis,
       String? debugLabel,
       AutoScrollController? copyTagsFrom}) {
     return SimpleAutoScrollController(
-        initialScrollOffset: initialScrollOffset,
         keepScrollOffset: keepScrollOffset,
         // suggestedRowHeight: suggestedRowHeight,
         viewportBoundaryGetter: viewportBoundaryGetter,

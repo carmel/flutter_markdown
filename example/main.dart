@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
+
 import 'package:flutter_markdown/markdown.dart';
-// import 'package:flutter_markdown/src/render/extension_set.dart' as md;
-// import 'package:flutter_markdown/src/render/block_parser.dart' as md;
-// import 'package:flutter_markdown/src/render/inline_parser.dart' as md;
-// import 'package:flutter_markdown/src/style_sheet.dart';
 
 import 'supscript.dart';
 
@@ -72,10 +69,70 @@ Automatic URL Linking: https://www.npmjs.com/package/vue3-markdown
 - [ ] Update the website
 - [ ] Contact the media
 
-| Syntax    | Description |
-| --------- | ----------- |
-| Header    | Title       |
-| Paragraph | Text        |
+1. First item
+2. Second item
+3. Third item
+---
+1. First item
+2. Second item
+3. Third item
+---
+1. First item
+2. Second item
+3. Third item
+---
+1. First item
+2. Second item
+3. Third item
+---
+1. First item
+2. Second item
+3. Third item
+---
+1. First item
+2. Second item
+3. Third item
+---
+1. First item
+2. Second item
+3. Third item
+---
+1. First item
+2. Second item
+3. Third item
+---
+1. First item
+2. Second item
+3. Third item
+---
+1. First item
+2. Second item
+3. Third item
+---
+1. First item
+2. Second item
+3. Third item
+---
+1. First item
+2. Second item
+3. Third item
+---
+1. First item
+2. Second item
+3. Third item
+---
+1. First item
+2. Second item
+3. Third item
+---
+1. First item
+2. Second item
+3. Third item
+---
+1. First item
+2. Second item
+3. Third item
+---
 """;
 
   // This widget is the root of your application.
@@ -134,8 +191,6 @@ Automatic URL Linking: https://www.npmjs.com/package/vue3-markdown
             // backgroundColor: Color(0xf0EBEDEE),
             // expandedHeight: 120.0,
             // iconTheme: IconThemeData(color: Colors.black38),
-            leading: IconButton(
-                icon: const Icon(Icons.arrow_back_ios, color: Colors.black38), onPressed: () => Navigator.pop(context)),
             title: const Text('flutter markdown demo'),
             // bottom: Layout.appBar(ctx: context, title: 'testw'),
             actions: <Widget>[
@@ -178,7 +233,12 @@ Automatic URL Linking: https://www.npmjs.com/package/vue3-markdown
                   }),
             ],
           ),
-          notifyHandler: (max, offset) {},
+          initialScrollOffset: 30, // means 30%
+          notifyHandler: (maxScrollExtent, offset, index) {
+            print('max>>>>>>>>$maxScrollExtent, offset>>>>>>>>$offset');
+            print('reading>>>>>>>>>>>>> ${(offset * 100 / maxScrollExtent).round()}%');
+            print('reading index>>>>>>>>>>>>> $index');
+          },
           styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
             textScaleFactor: 1.3,
             listPadding: const EdgeInsets.all(20),
