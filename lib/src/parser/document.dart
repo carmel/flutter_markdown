@@ -41,10 +41,6 @@ class Document {
     CodeSyntax(),
   };
 
-  Iterable<BlockSyntax> get blockSyntaxes => _blockSyntaxes;
-
-  Iterable<InlineSyntax> get inlineSyntaxes => _inlineSyntaxes;
-
   Document({
     Iterable<BlockSyntax>? blockSyntaxes,
     Iterable<InlineSyntax>? inlineSyntaxes,
@@ -59,15 +55,19 @@ class Document {
       ..addAll(this.extensionSet.inlineSyntaxes);
   }
 
+  Iterable<BlockSyntax> get blockSyntaxes => _blockSyntaxes;
+
+  Iterable<InlineSyntax> get inlineSyntaxes => _inlineSyntaxes;
+
+  /// Parses the given inline Markdown [text] to a series of AST nodes.
+  List<MarkedNode> parseInline(String text) => InlineParser(text, this).parse();
+
   /// Parses the given [lines] of Markdown to a series of AST nodes.
   List<MarkedNode> parseLines(List<String> lines) {
     final nodes = BlockParser(lines, this).parseLines();
     _parseInlineContent(nodes);
     return nodes;
   }
-
-  /// Parses the given inline Markdown [text] to a series of AST nodes.
-  List<MarkedNode> parseInline(String text) => InlineParser(text, this).parse();
 
   void _parseInlineContent(List<MarkedNode> nodes) {
     for (var i = 0; i < nodes.length; i++) {

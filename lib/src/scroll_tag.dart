@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
+
 import 'scroll_to.dart' show AutoScrollController;
 
 class AutoScrollTag extends StatefulWidget {
@@ -18,10 +19,17 @@ class AutoScrollTag extends StatefulWidget {
 
 class AutoScrollTagState extends State<AutoScrollTag> with TickerProviderStateMixin {
   @override
-  void initState() {
-    super.initState();
-    if (!widget.disabled) {
-      register(widget.index);
+  Widget build(BuildContext context) {
+    return widget.child;
+  }
+
+  @override
+  void didUpdateWidget(AutoScrollTag oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.index != widget.index || oldWidget.key != widget.key || oldWidget.disabled != widget.disabled) {
+      if (!oldWidget.disabled) unregister(oldWidget.index);
+
+      if (!widget.disabled) register(widget.index);
     }
   }
 
@@ -34,12 +42,10 @@ class AutoScrollTagState extends State<AutoScrollTag> with TickerProviderStateMi
   }
 
   @override
-  void didUpdateWidget(AutoScrollTag oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.index != widget.index || oldWidget.key != widget.key || oldWidget.disabled != widget.disabled) {
-      if (!oldWidget.disabled) unregister(oldWidget.index);
-
-      if (!widget.disabled) register(widget.index);
+  void initState() {
+    super.initState();
+    if (!widget.disabled) {
+      register(widget.index);
     }
   }
 
@@ -55,10 +61,5 @@ class AutoScrollTagState extends State<AutoScrollTag> with TickerProviderStateMi
     // so we can't assert there isn't a existing key
     // assert(widget.controller.tagMap.keys.contains(index));
     if (widget.controller.tagMap[index] == this) widget.controller.tagMap.remove(index);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return widget.child;
   }
 }

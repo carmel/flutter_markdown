@@ -3,18 +3,29 @@ import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'measure_size.dart';
-import 'parser/inline_parser.dart';
-import 'scroll_tag.dart' show AutoScrollTag;
-import 'scroll_to.dart' show AutoScrollController, AutoScrollPosition;
 
 import '_functions_io.dart' if (dart.library.html) '_functions_web.dart';
 import 'builder.dart';
 import 'parser/ast.dart';
-import 'parser/extension_set.dart' show ExtensionSet;
 import 'parser/block_parser.dart' show BlockSyntax;
 import 'parser/document.dart' show Document;
+import 'parser/extension_set.dart' show ExtensionSet;
+import 'parser/inline_parser.dart';
+import 'scroll_tag.dart' show AutoScrollTag;
+import 'scroll_to.dart' show AutoScrollController;
 import 'style_sheet.dart' show MarkdownStyleSheet;
+
+/// Signature for custom bullet widget.
+///
+/// Used by [MarkdownWidget.bulletBuilder]
+typedef MarkdownBulletBuilder = Widget Function(int index, BulletStyle style);
+
+/// Signature for custom checkbox widget.
+///
+/// Used by [MarkdownWidget.checkboxBuilder]
+typedef MarkdownCheckboxBuilder = Widget Function(bool value);
+
+typedef MarkdownTapImageCallback = void Function(String url, String? tag);
 
 /// Signature for callbacks used by [MarkdownWidget] when the user taps a link.
 /// The callback will return the link text, destination, and title from the
@@ -22,18 +33,6 @@ import 'style_sheet.dart' show MarkdownStyleSheet;
 ///
 /// Used by [MarkdownWidget.onTapLink].
 typedef MarkdownTapLinkCallback = void Function(String text, String? href, String title);
-
-typedef MarkdownTapImageCallback = void Function(String url, String? tag);
-
-/// Signature for custom checkbox widget.
-///
-/// Used by [MarkdownWidget.checkboxBuilder]
-typedef MarkdownCheckboxBuilder = Widget Function(bool value);
-
-/// Signature for custom bullet widget.
-///
-/// Used by [MarkdownWidget.bulletBuilder]
-typedef MarkdownBulletBuilder = Widget Function(int index, BulletStyle style);
 
 /// Enumeration sent to the user when calling [MarkdownBulletBuilder]
 ///
@@ -46,17 +45,115 @@ enum BulletStyle {
   unorderedList,
 }
 
-/// Creates a format [TextSpan] given a string.
+/// A scrolling widget that parses and displays Markdown.
 ///
-/// Used by [MarkdownWidget] to highlight the contents of `pre` elements.
-abstract class SyntaxHighlighter {
-  // ignore: one_member_abstracts
-  /// Returns the formatted [TextSpan] for the given string.
-  TextSpan format(String source);
+/// Supports all GitHub Flavored Markdown from the
+/// [specification](https://github.github.com/gfm/).
+///
+/// See also:
+///
+///  * [MarkdownBody], which is a non-scrolling container of Markdown.
+///  * <https://github.github.com/gfm/>
+class Markdown extends MarkdownWidget {
+  final EdgeInsets padding;
+
+  /// How the scroll view should respond to user input.
+  ///
+  /// See also: [ScrollView.physics]
+  final ScrollPhysics? physics;
+
+  /// Whether the extent of the scroll view in the scroll direction should be
+  /// determined by the contents being viewed.
+  ///
+  /// See also: [ScrollView.shrinkWrap]
+  final bool shrinkWrap;
+
+  /// Creates a scrolling widget that parses and displays Markdown.
+  Markdown({
+    Key? key,
+    required AutoScrollController controller,
+    required int initialScrollOffset,
+    required String data,
+    required String baseUrl,
+    required MarkdownTapImageCallback onTapImage,
+    required MarkdownTapLinkCallback onTapLink,
+    bool selectable = false,
+    MarkdownStyleSheet? styleSheet,
+    MarkdownStyleSheetBaseTheme? styleSheetTheme,
+    SyntaxHighlighter? syntaxHighlighter,
+    List<BlockSyntax>? blockSyntaxes,
+    List<InlineSyntax>? inlineSyntaxes,
+    ExtensionSet? extensionSet,
+    MarkdownCheckboxBuilder? checkboxBuilder,
+    MarkdownBulletBuilder? bulletBuilder,
+    Map<String, MarkdownElementBuilder> builders = const <String, MarkdownElementBuilder>{},
+    Map<String, MarkdownPaddingBuilder> paddingBuilders = const <String, MarkdownPaddingBuilder>{},
+    MarkdownListItemCrossAxisAlignment listItemCrossAxisAlignment = MarkdownListItemCrossAxisAlignment.baseline,
+    this.padding = const EdgeInsets.all(16.0),
+    this.physics,
+    this.shrinkWrap = false,
+    bool softLineBreak = false,
+  }) : super(
+          key: key,
+          data: data,
+          baseUrl: baseUrl,
+          controller: controller,
+          initialScrollOffset: initialScrollOffset,
+          styleSheet: styleSheet,
+          styleSheetTheme: styleSheetTheme,
+          syntaxHighlighter: syntaxHighlighter,
+          onTapLink: onTapLink,
+          onTapImage: onTapImage,
+          blockSyntaxes: blockSyntaxes,
+          inlineSyntaxes: inlineSyntaxes,
+          extensionSet: extensionSet,
+          checkboxBuilder: checkboxBuilder,
+          builders: builders,
+          paddingBuilders: paddingBuilders,
+          listItemCrossAxisAlignment: listItemCrossAxisAlignment,
+          bulletBuilder: bulletBuilder,
+          softLineBreak: softLineBreak,
+        );
+  // @protected
+  // late List<double> widgetHeight;
+
+  @override
+  Widget build(BuildContext context, List<Widget>? children) {
+    // widgetHeight = List.filled(children!.length, 0);
+    return SliverPadding(
+      padding: padding,
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, i) {
+            if (children![i] is! SizedBox) {
+              final tagKey = i + 1;
+              return AutoScrollTag(
+                key: ValueKey(tagKey),
+                controller: controller,
+                index: tagKey,
+                child: children[i],
+              );
+            }
+            return const SizedBox();
+          },
+          childCount: children?.length,
+        ),
+      ),
+    );
+  }
 }
 
 /// An interface for an element builder.
 abstract class MarkdownElementBuilder {
+  /// Called when an Element has been reached, after its children have been
+  /// visited.
+  ///
+  /// If [MarkdownWidget.styleSheet] has a style of this tag, will passing
+  /// to [preferredStyle].
+  ///
+  /// If you needn't build a widget, return null.
+  InlineSpan? visitElementAfter(MarkedElement element, TextStyle? preferredStyle) => null;
+
   /// Called when an Element has been reached, before its children have been
   /// visited.
   void visitElementBefore(MarkedElement element) {}
@@ -68,32 +165,6 @@ abstract class MarkdownElementBuilder {
   ///
   /// If you needn't build a widget, return null.
   InlineSpan? visitText(MarkedText text, TextStyle? preferredStyle) => null;
-
-  /// Called when an Element has been reached, after its children have been
-  /// visited.
-  ///
-  /// If [MarkdownWidget.styleSheet] has a style of this tag, will passing
-  /// to [preferredStyle].
-  ///
-  /// If you needn't build a widget, return null.
-  InlineSpan? visitElementAfter(MarkedElement element, TextStyle? preferredStyle) => null;
-}
-
-/// Enum to specify which theme being used when creating [MarkdownStyleSheet]
-///
-/// [material] - create MarkdownStyleSheet based on MaterialTheme
-/// [cupertino] - create MarkdownStyleSheet based on CupertinoTheme
-/// [platform] - create MarkdownStyleSheet based on the Platform where the
-/// is running on. Material on Android and Cupertino on iOS
-enum MarkdownStyleSheetBaseTheme {
-  /// Creates a MarkdownStyleSheet based on MaterialTheme.
-  material,
-
-  /// Creates a MarkdownStyleSheet based on CupertinoTheme.
-  cupertino,
-
-  /// Creates a MarkdownStyleSheet whose theme is based on the current platform.
-  platform,
 }
 
 /// Enumeration of alignment strategies for the cross axis of list items.
@@ -130,6 +201,33 @@ enum MarkdownListItemCrossAxisAlignment {
   start,
 }
 
+/// An interface for an padding builder for element.
+abstract class MarkdownPaddingBuilder {
+  /// Called when a widget node has been rendering and need tag padding.
+  EdgeInsets getPadding() => EdgeInsets.zero;
+
+  /// Called when an Element has been reached, before its children have been
+  /// visited.
+  void visitElementBefore(MarkedElement element) {}
+}
+
+/// Enum to specify which theme being used when creating [MarkdownStyleSheet]
+///
+/// [material] - create MarkdownStyleSheet based on MaterialTheme
+/// [cupertino] - create MarkdownStyleSheet based on CupertinoTheme
+/// [platform] - create MarkdownStyleSheet based on the Platform where the
+/// is running on. Material on Android and Cupertino on iOS
+enum MarkdownStyleSheetBaseTheme {
+  /// Creates a MarkdownStyleSheet based on MaterialTheme.
+  material,
+
+  /// Creates a MarkdownStyleSheet based on CupertinoTheme.
+  cupertino,
+
+  /// Creates a MarkdownStyleSheet whose theme is based on the current platform.
+  platform,
+}
+
 /// A base class for widgets that parse and display Markdown.
 ///
 /// Supports all standard Markdown from the original
@@ -141,33 +239,6 @@ enum MarkdownListItemCrossAxisAlignment {
 ///  * [MarkdownBody], which is a non-scrolling container of Markdown.
 ///  * <https://github.github.com/gfm/>
 abstract class MarkdownWidget extends StatefulWidget {
-  /// Creates a widget that parses and displays Markdown.
-  ///
-  /// The [data] argument must not be null.
-  const MarkdownWidget({
-    Key? key,
-    required this.data,
-    required this.baseUrl,
-    required this.onTapImage,
-    required this.controller,
-    required this.initialScrollOffset,
-    this.styleSheet,
-    this.styleSheetTheme = MarkdownStyleSheetBaseTheme.material,
-    this.syntaxHighlighter,
-    this.onTapLink,
-    this.blockSyntaxes,
-    this.inlineSyntaxes,
-    this.extensionSet,
-    this.checkboxBuilder,
-    this.bulletBuilder,
-    this.builders = const <String, MarkdownElementBuilder>{},
-    this.paddingBuilders = const <String, MarkdownPaddingBuilder>{},
-    this.fitContent = false,
-    this.listItemCrossAxisAlignment = MarkdownListItemCrossAxisAlignment.baseline,
-    this.softLineBreak = false,
-    imageBuilder,
-  }) : super(key: key);
-
   /// The Markdown to display.
   final String data;
 
@@ -257,6 +328,33 @@ abstract class MarkdownWidget extends StatefulWidget {
   /// specification on soft line breaks when lines of text are joined.
   final bool softLineBreak;
 
+  /// Creates a widget that parses and displays Markdown.
+  ///
+  /// The [data] argument must not be null.
+  const MarkdownWidget({
+    Key? key,
+    required this.data,
+    required this.baseUrl,
+    required this.onTapImage,
+    required this.controller,
+    required this.initialScrollOffset,
+    this.styleSheet,
+    this.styleSheetTheme = MarkdownStyleSheetBaseTheme.material,
+    this.syntaxHighlighter,
+    this.onTapLink,
+    this.blockSyntaxes,
+    this.inlineSyntaxes,
+    this.extensionSet,
+    this.checkboxBuilder,
+    this.bulletBuilder,
+    this.builders = const <String, MarkdownElementBuilder>{},
+    this.paddingBuilders = const <String, MarkdownPaddingBuilder>{},
+    this.fitContent = false,
+    this.listItemCrossAxisAlignment = MarkdownListItemCrossAxisAlignment.baseline,
+    this.softLineBreak = false,
+    imageBuilder,
+  }) : super(key: key);
+
   /// Subclasses should override this function to display the given children,
   /// which are the parsed representation of [data].
   @protected
@@ -266,24 +364,50 @@ abstract class MarkdownWidget extends StatefulWidget {
   _MarkdownWidgetState createState() => _MarkdownWidgetState();
 }
 
+/// Creates a format [TextSpan] given a string.
+///
+/// Used by [MarkdownWidget] to highlight the contents of `pre` elements.
+abstract class SyntaxHighlighter {
+  // ignore: one_member_abstracts
+  /// Returns the formatted [TextSpan] for the given string.
+  TextSpan format(String source);
+}
+
+/// Parse [task list items](https://github.github.com/gfm/#task-list-items-extension-).
+class TaskListSyntax extends InlineSyntax {
+  static const String _pattern = r'^ *\[([ xX])\] +';
+
+  /// Cretaes a new instance.
+  TaskListSyntax() : super(_pattern);
+
+  @override
+  bool onMatch(InlineParser parser, Match match) {
+    final MarkedElement el = MarkedElement.withTag('input');
+    el.attributes['type'] = 'checkbox';
+    el.attributes['disabled'] = 'true';
+    el.attributes['checked'] = '${match[1]!.trim().isNotEmpty}';
+    parser.addNode(el);
+    return true;
+  }
+}
+
 class _MarkdownWidgetState extends State<MarkdownWidget> implements MarkdownBuilderDelegate {
   List<Widget>? _children;
   final List<GestureRecognizer> _recognizers = <GestureRecognizer>[];
 
   @override
-  void initState() {
-    super.initState();
-    if (widget.initialScrollOffset != 0) {
-      WidgetsBinding.instance?.addPostFrameCallback((_) {
-        if (widget.controller.hasClients) {
-          widget.controller.jumpTo(widget.initialScrollOffset * widget.controller.position.maxScrollExtent / 100);
-          // widget.controller.scrollToIndex(
-          //   widget.initialScrollOffset,
-          //   preferPosition: AutoScrollPosition.middle,
-          // );
+  Widget build(BuildContext context) => widget.build(context, _children);
+
+  @override
+  GestureRecognizer createLink(String text, String? href, String title) {
+    final TapGestureRecognizer recognizer = TapGestureRecognizer()
+      ..onTap = () {
+        if (widget.onTapLink != null) {
+          widget.onTapLink!(text, href, title);
         }
-      });
-    }
+      };
+    _recognizers.add(recognizer);
+    return recognizer;
   }
 
   @override
@@ -305,6 +429,42 @@ class _MarkdownWidgetState extends State<MarkdownWidget> implements MarkdownBuil
     _disposeRecognizers();
     widget.controller.dispose();
     super.dispose();
+  }
+
+  @override
+  TextSpan formatText(MarkdownStyleSheet styleSheet, String code) {
+    code = code.replaceAll(RegExp(r'\n$'), '');
+    if (widget.syntaxHighlighter != null) {
+      return widget.syntaxHighlighter!.format(code);
+    }
+    return TextSpan(style: styleSheet.code, text: code);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialScrollOffset != 0) {
+      WidgetsBinding.instance?.addPostFrameCallback((_) {
+        if (widget.controller.hasClients) {
+          widget.controller.jumpTo(widget.initialScrollOffset * widget.controller.position.maxScrollExtent / 100);
+          // widget.controller.scrollToIndex(
+          //   widget.initialScrollOffset,
+          //   preferPosition: AutoScrollPosition.middle,
+          // );
+        }
+      });
+    }
+  }
+
+  void _disposeRecognizers() {
+    if (_recognizers.isEmpty) {
+      return;
+    }
+    final List<GestureRecognizer> localRecognizers = List<GestureRecognizer>.from(_recognizers);
+    _recognizers.clear();
+    for (final GestureRecognizer recognizer in localRecognizers) {
+      recognizer.dispose();
+    }
   }
 
   void _parseMarkdown() {
@@ -341,171 +501,4 @@ class _MarkdownWidgetState extends State<MarkdownWidget> implements MarkdownBuil
 
     _children = builder.build(astNodes);
   }
-
-  void _disposeRecognizers() {
-    if (_recognizers.isEmpty) {
-      return;
-    }
-    final List<GestureRecognizer> localRecognizers = List<GestureRecognizer>.from(_recognizers);
-    _recognizers.clear();
-    for (final GestureRecognizer recognizer in localRecognizers) {
-      recognizer.dispose();
-    }
-  }
-
-  @override
-  GestureRecognizer createLink(String text, String? href, String title) {
-    final TapGestureRecognizer recognizer = TapGestureRecognizer()
-      ..onTap = () {
-        if (widget.onTapLink != null) {
-          widget.onTapLink!(text, href, title);
-        }
-      };
-    _recognizers.add(recognizer);
-    return recognizer;
-  }
-
-  @override
-  TextSpan formatText(MarkdownStyleSheet styleSheet, String code) {
-    code = code.replaceAll(RegExp(r'\n$'), '');
-    if (widget.syntaxHighlighter != null) {
-      return widget.syntaxHighlighter!.format(code);
-    }
-    return TextSpan(style: styleSheet.code, text: code);
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.build(context, _children);
-}
-
-/// A scrolling widget that parses and displays Markdown.
-///
-/// Supports all GitHub Flavored Markdown from the
-/// [specification](https://github.github.com/gfm/).
-///
-/// See also:
-///
-///  * [MarkdownBody], which is a non-scrolling container of Markdown.
-///  * <https://github.github.com/gfm/>
-class Markdown extends MarkdownWidget {
-  /// Creates a scrolling widget that parses and displays Markdown.
-  Markdown({
-    Key? key,
-    required AutoScrollController controller,
-    required int initialScrollOffset,
-    required String data,
-    required String baseUrl,
-    required MarkdownTapImageCallback onTapImage,
-    required MarkdownTapLinkCallback onTapLink,
-    bool selectable = false,
-    MarkdownStyleSheet? styleSheet,
-    MarkdownStyleSheetBaseTheme? styleSheetTheme,
-    SyntaxHighlighter? syntaxHighlighter,
-    List<BlockSyntax>? blockSyntaxes,
-    List<InlineSyntax>? inlineSyntaxes,
-    ExtensionSet? extensionSet,
-    MarkdownCheckboxBuilder? checkboxBuilder,
-    MarkdownBulletBuilder? bulletBuilder,
-    Map<String, MarkdownElementBuilder> builders = const <String, MarkdownElementBuilder>{},
-    Map<String, MarkdownPaddingBuilder> paddingBuilders = const <String, MarkdownPaddingBuilder>{},
-    MarkdownListItemCrossAxisAlignment listItemCrossAxisAlignment = MarkdownListItemCrossAxisAlignment.baseline,
-    this.padding = const EdgeInsets.all(16.0),
-    this.physics,
-    this.shrinkWrap = false,
-    bool softLineBreak = false,
-  }) : super(
-          key: key,
-          data: data,
-          baseUrl: baseUrl,
-          controller: controller,
-          initialScrollOffset: initialScrollOffset,
-          styleSheet: styleSheet,
-          styleSheetTheme: styleSheetTheme,
-          syntaxHighlighter: syntaxHighlighter,
-          onTapLink: onTapLink,
-          onTapImage: onTapImage,
-          blockSyntaxes: blockSyntaxes,
-          inlineSyntaxes: inlineSyntaxes,
-          extensionSet: extensionSet,
-          checkboxBuilder: checkboxBuilder,
-          builders: builders,
-          paddingBuilders: paddingBuilders,
-          listItemCrossAxisAlignment: listItemCrossAxisAlignment,
-          bulletBuilder: bulletBuilder,
-          softLineBreak: softLineBreak,
-        );
-
-  final EdgeInsets padding;
-
-  /// How the scroll view should respond to user input.
-  ///
-  /// See also: [ScrollView.physics]
-  final ScrollPhysics? physics;
-
-  /// Whether the extent of the scroll view in the scroll direction should be
-  /// determined by the contents being viewed.
-  ///
-  /// See also: [ScrollView.shrinkWrap]
-  final bool shrinkWrap;
-  @protected
-  late List<double> widgetHeight;
-
-  @override
-  Widget build(BuildContext context, List<Widget>? children) {
-    widgetHeight = List.filled(children!.length, 0);
-    return SliverPadding(
-      padding: padding,
-      sliver: SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, i) {
-            if (children[i] is! SizedBox) {
-              final tagKey = i + 1;
-              return AutoScrollTag(
-                key: ValueKey(tagKey),
-                controller: controller,
-                index: tagKey,
-                child: MeasureSize(
-                  index: i,
-                  child: children[i],
-                  onChange: (idx, size) {
-                    widgetHeight[idx] = size.height;
-                  },
-                ),
-              );
-            }
-            return const SizedBox();
-          },
-          childCount: children.length,
-        ),
-      ),
-    );
-  }
-}
-
-/// Parse [task list items](https://github.github.com/gfm/#task-list-items-extension-).
-class TaskListSyntax extends InlineSyntax {
-  /// Cretaes a new instance.
-  TaskListSyntax() : super(_pattern);
-
-  static const String _pattern = r'^ *\[([ xX])\] +';
-
-  @override
-  bool onMatch(InlineParser parser, Match match) {
-    final MarkedElement el = MarkedElement.withTag('input');
-    el.attributes['type'] = 'checkbox';
-    el.attributes['disabled'] = 'true';
-    el.attributes['checked'] = '${match[1]!.trim().isNotEmpty}';
-    parser.addNode(el);
-    return true;
-  }
-}
-
-/// An interface for an padding builder for element.
-abstract class MarkdownPaddingBuilder {
-  /// Called when an Element has been reached, before its children have been
-  /// visited.
-  void visitElementBefore(MarkedElement element) {}
-
-  /// Called when a widget node has been rendering and need tag padding.
-  EdgeInsets getPadding() => EdgeInsets.zero;
 }

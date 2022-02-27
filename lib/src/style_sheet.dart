@@ -7,6 +7,144 @@ import 'package:flutter/material.dart';
 
 /// Defines which [TextStyle] objects to use for which Markdown elements.
 class MarkdownStyleSheet {
+  /// The [TextStyle] to use for `a` elements.
+  final TextStyle? a;
+
+  /// The [TextStyle] to use for `p` elements.
+  final TextStyle? p;
+
+  /// The padding to use for `p` elements.
+  final EdgeInsets? pPadding;
+
+  /// The [TextStyle] to use for `code` elements.
+  final TextStyle? code;
+
+  final EdgeInsets? imgPadding;
+
+  final EdgeInsets? listPadding;
+
+  /// The [TextStyle] to use for `h1` elements.
+  final TextStyle? h1;
+
+  /// The padding to use for `h1` elements.
+  final EdgeInsets? h1Padding;
+
+  /// The [TextStyle] to use for `h2` elements.
+  final TextStyle? h2;
+
+  /// The padding to use for `h2` elements.
+  final EdgeInsets? h2Padding;
+
+  /// The [TextStyle] to use for `h3` elements.
+  final TextStyle? h3;
+  /// The padding to use for `h3` elements.
+  final EdgeInsets? h3Padding;
+
+  /// The [TextStyle] to use for `h4` elements.
+  final TextStyle? h4;
+
+  /// The padding to use for `h4` elements.
+  final EdgeInsets? h4Padding;
+
+  /// The [TextStyle] to use for `h5` elements.
+  final TextStyle? h5;
+
+  /// The padding to use for `h5` elements.
+  final EdgeInsets? h5Padding;
+
+  /// The [TextStyle] to use for `h6` elements.
+  final TextStyle? h6;
+
+  /// The padding to use for `h6` elements.
+  final EdgeInsets? h6Padding;
+
+  /// The [TextStyle] to use for `em` elements.
+  final TextStyle? em;
+
+  /// The [TextStyle] to use for `strong` elements.
+  final TextStyle? strong;
+
+  /// The [TextStyle] to use for `del` elements.
+  final TextStyle? del;
+
+  /// The [TextStyle] to use for `blockquote` elements.
+  final TextStyle? blockquote;
+
+  /// The [TextStyle] to use for `img` elements.
+  final TextStyle? img;
+
+  /// The [TextStyle] to use for `input` elements.
+  final TextStyle? checkbox;
+
+  /// The amount of vertical space to use between block-level elements.
+  final double? blockSpacing;
+
+  /// The amount of horizontal space to indent list items.
+  final double? listIndent;
+
+  /// The [TextStyle] to use for bullets.
+  final TextStyle? listBullet;
+
+  /// The padding to use for bullets.
+  final EdgeInsets? listBulletPadding;
+
+  final double? tableColumnSpacing;
+
+  final Color? tableStripeColor;
+
+  /// The padding to use for `blockquote` elements.
+  final EdgeInsets? blockquotePadding;
+
+  /// The decoration to use behind `blockquote` elements.
+  final Decoration? blockquoteDecoration;
+
+  /// The padding to use for `pre` elements.
+  final EdgeInsets? codeblockPadding;
+
+  /// The decoration to use behind for `pre` elements.
+  final Decoration? codeblockDecoration;
+
+  /// The decoration to use for `hr` elements.
+  final Decoration? horizontalRuleDecoration;
+
+  /// The [WrapAlignment] to use for normal text. Defaults to start.
+  final WrapAlignment textAlign;
+
+  /// The [WrapAlignment] to use for h1 text. Defaults to start.
+  final WrapAlignment h1Align;
+
+  /// The [WrapAlignment] to use for h2 text. Defaults to start.
+  final WrapAlignment h2Align;
+
+  /// The [WrapAlignment] to use for h3 text. Defaults to start.
+  final WrapAlignment h3Align;
+
+  /// The [WrapAlignment] to use for h4 text. Defaults to start.
+  final WrapAlignment h4Align;
+
+  /// The [WrapAlignment] to use for h5 text. Defaults to start.
+  final WrapAlignment h5Align;
+
+  /// The [WrapAlignment] to use for h6 text. Defaults to start.
+  final WrapAlignment h6Align;
+
+  /// The [WrapAlignment] to use for an unordered list. Defaults to start.
+  final WrapAlignment unorderedListAlign;
+
+  /// The [WrapAlignment] to use for an ordered list. Defaults to start.
+  final WrapAlignment orderedListAlign;
+
+  /// The [WrapAlignment] to use for a blockquote. Defaults to start.
+  final WrapAlignment blockquoteAlign;
+
+  /// The [WrapAlignment] to use for a code block. Defaults to start.
+  final WrapAlignment codeblockAlign;
+
+  /// The text scale factor to use in textual elements
+  final double? textScaleFactor;
+
+  Map<String, TextStyle?> _styles;
+
   /// Creates an explicit mapping of [TextStyle] objects to Markdown elements.
   MarkdownStyleSheet({
     this.a,
@@ -75,67 +213,6 @@ class MarkdownStyleSheet {
           'img': img,
           'table': p,
         };
-
-  /// Creates a [MarkdownStyleSheet] from the [TextStyle]s in the provided [ThemeData].
-  factory MarkdownStyleSheet.fromTheme(ThemeData theme) {
-    assert(theme.textTheme.bodyText2?.fontSize != null);
-    return MarkdownStyleSheet(
-      a: const TextStyle(color: Color(0xff3e8ed0)),
-      p: theme.textTheme.bodyText2,
-      pPadding: const EdgeInsets.symmetric(vertical: 4),
-      code: theme.textTheme.bodyText2!.copyWith(
-        backgroundColor: theme.cardTheme.color ?? theme.cardColor,
-        fontFamily: 'monospace',
-        fontSize: theme.textTheme.bodyText2!.fontSize! * 0.85,
-      ),
-      img: theme.textTheme.bodyText2,
-      imgPadding: const EdgeInsets.symmetric(vertical: 4),
-      listPadding: const EdgeInsets.symmetric(vertical: 4),
-      h1: theme.textTheme.headline5,
-      h1Padding: const EdgeInsets.symmetric(vertical: 4),
-      h2: theme.textTheme.headline6,
-      h2Padding: const EdgeInsets.symmetric(vertical: 4),
-      h3: theme.textTheme.subtitle1,
-      h3Padding: const EdgeInsets.symmetric(vertical: 4),
-      h4: theme.textTheme.bodyText1,
-      h4Padding: const EdgeInsets.symmetric(vertical: 4),
-      h5: theme.textTheme.bodyText1,
-      h5Padding: const EdgeInsets.symmetric(vertical: 4),
-      h6: theme.textTheme.bodyText1,
-      h6Padding: const EdgeInsets.symmetric(vertical: 4),
-      em: const TextStyle(fontStyle: FontStyle.italic),
-      strong: const TextStyle(fontWeight: FontWeight.bold),
-      del: const TextStyle(decoration: TextDecoration.lineThrough),
-      blockquote: theme.textTheme.bodyText2,
-      checkbox: theme.textTheme.bodyText2!.copyWith(
-        color: theme.primaryColor,
-      ),
-      blockSpacing: 8.0,
-      listIndent: 24.0,
-      listBullet: theme.textTheme.bodyText2,
-      listBulletPadding: const EdgeInsets.only(right: 4),
-      tableColumnSpacing: 0,
-      tableStripeColor: const Color(0xFFCBCBCB),
-      blockquotePadding: const EdgeInsets.all(8.0),
-      blockquoteDecoration: BoxDecoration(
-        color: Colors.blue.shade100,
-        borderRadius: BorderRadius.circular(2.0),
-      ),
-      codeblockPadding: const EdgeInsets.all(8.0),
-      codeblockDecoration: BoxDecoration(
-        color: theme.cardTheme.color ?? theme.cardColor,
-        borderRadius: BorderRadius.circular(2.0),
-      ),
-      horizontalRuleDecoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            width: 5.0,
-            color: theme.dividerColor,
-          ),
-        ),
-      ),
-    );
-  }
 
   /// Creates a [MarkdownStyleSheet] from the [TextStyle]s in the provided [CupertinoThemeData].
   factory MarkdownStyleSheet.fromCupertinoTheme(CupertinoThemeData theme) {
@@ -237,6 +314,67 @@ class MarkdownStyleSheet {
     );
   }
 
+  /// Creates a [MarkdownStyleSheet] from the [TextStyle]s in the provided [ThemeData].
+  factory MarkdownStyleSheet.fromTheme(ThemeData theme) {
+    assert(theme.textTheme.bodyText2?.fontSize != null);
+    return MarkdownStyleSheet(
+      a: const TextStyle(color: Color(0xff3e8ed0)),
+      p: theme.textTheme.bodyText2,
+      pPadding: const EdgeInsets.symmetric(vertical: 4),
+      code: theme.textTheme.bodyText2!.copyWith(
+        backgroundColor: theme.cardTheme.color ?? theme.cardColor,
+        fontFamily: 'monospace',
+        fontSize: theme.textTheme.bodyText2!.fontSize! * 0.85,
+      ),
+      img: theme.textTheme.bodyText2,
+      imgPadding: const EdgeInsets.symmetric(vertical: 4),
+      listPadding: const EdgeInsets.symmetric(vertical: 4),
+      h1: theme.textTheme.headline5,
+      h1Padding: const EdgeInsets.symmetric(vertical: 4),
+      h2: theme.textTheme.headline6,
+      h2Padding: const EdgeInsets.symmetric(vertical: 4),
+      h3: theme.textTheme.subtitle1,
+      h3Padding: const EdgeInsets.symmetric(vertical: 4),
+      h4: theme.textTheme.bodyText1,
+      h4Padding: const EdgeInsets.symmetric(vertical: 4),
+      h5: theme.textTheme.bodyText1,
+      h5Padding: const EdgeInsets.symmetric(vertical: 4),
+      h6: theme.textTheme.bodyText1,
+      h6Padding: const EdgeInsets.symmetric(vertical: 4),
+      em: const TextStyle(fontStyle: FontStyle.italic),
+      strong: const TextStyle(fontWeight: FontWeight.bold),
+      del: const TextStyle(decoration: TextDecoration.lineThrough),
+      blockquote: theme.textTheme.bodyText2,
+      checkbox: theme.textTheme.bodyText2!.copyWith(
+        color: theme.primaryColor,
+      ),
+      blockSpacing: 8.0,
+      listIndent: 24.0,
+      listBullet: theme.textTheme.bodyText2,
+      listBulletPadding: const EdgeInsets.only(right: 4),
+      tableColumnSpacing: 0,
+      tableStripeColor: const Color(0xFFCBCBCB),
+      blockquotePadding: const EdgeInsets.all(8.0),
+      blockquoteDecoration: BoxDecoration(
+        color: Colors.blue.shade100,
+        borderRadius: BorderRadius.circular(2.0),
+      ),
+      codeblockPadding: const EdgeInsets.all(8.0),
+      codeblockDecoration: BoxDecoration(
+        color: theme.cardTheme.color ?? theme.cardColor,
+        borderRadius: BorderRadius.circular(2.0),
+      ),
+      horizontalRuleDecoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            width: 5.0,
+            color: theme.dividerColor,
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Creates a [MarkdownStyle] from the [TextStyle]s in the provided [ThemeData].
   ///
   /// This constructor uses larger fonts for the headings than in
@@ -297,6 +435,121 @@ class MarkdownStyleSheet {
         ),
       ),
     );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode {
+    return hashList(<Object?>[
+      a,
+      p,
+      pPadding,
+      code,
+      imgPadding,
+      listPadding,
+      h1,
+      h1Padding,
+      h2,
+      h2Padding,
+      h3,
+      h3Padding,
+      h4,
+      h4Padding,
+      h5,
+      h5Padding,
+      h6,
+      h6Padding,
+      em,
+      strong,
+      del,
+      blockquote,
+      img,
+      checkbox,
+      blockSpacing,
+      listIndent,
+      listBullet,
+      listBulletPadding,
+      tableColumnSpacing,
+      tableStripeColor,
+      blockquotePadding,
+      blockquoteDecoration,
+      codeblockPadding,
+      codeblockDecoration,
+      horizontalRuleDecoration,
+      textAlign,
+      h1Align,
+      h2Align,
+      h3Align,
+      h4Align,
+      h5Align,
+      h6Align,
+      unorderedListAlign,
+      orderedListAlign,
+      blockquoteAlign,
+      codeblockAlign,
+      textScaleFactor,
+    ]);
+  }
+
+  /// A [Map] from element name to the corresponding [TextStyle] object.
+  Map<String, TextStyle?> get styles => _styles;
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(dynamic other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    if (other.runtimeType != MarkdownStyleSheet) {
+      return false;
+    }
+    final MarkdownStyleSheet typedOther = other;
+    return typedOther.a == a &&
+        typedOther.p == p &&
+        typedOther.pPadding == pPadding &&
+        typedOther.code == code &&
+        typedOther.imgPadding == imgPadding &&
+        typedOther.listPadding == listPadding &&
+        typedOther.h1 == h1 &&
+        typedOther.h1Padding == h1Padding &&
+        typedOther.h2 == h2 &&
+        typedOther.h2Padding == h2Padding &&
+        typedOther.h3 == h3 &&
+        typedOther.h3Padding == h3Padding &&
+        typedOther.h4 == h4 &&
+        typedOther.h4Padding == h4Padding &&
+        typedOther.h5 == h5 &&
+        typedOther.h5Padding == h5Padding &&
+        typedOther.h6 == h6 &&
+        typedOther.h6Padding == h6Padding &&
+        typedOther.em == em &&
+        typedOther.strong == strong &&
+        typedOther.del == del &&
+        typedOther.blockquote == blockquote &&
+        typedOther.img == img &&
+        typedOther.checkbox == checkbox &&
+        typedOther.blockSpacing == blockSpacing &&
+        typedOther.listIndent == listIndent &&
+        typedOther.listBullet == listBullet &&
+        typedOther.listBulletPadding == listBulletPadding &&
+        typedOther.tableColumnSpacing == tableColumnSpacing &&
+        typedOther.tableStripeColor == tableStripeColor &&
+        typedOther.blockquotePadding == blockquotePadding &&
+        typedOther.blockquoteDecoration == blockquoteDecoration &&
+        typedOther.codeblockPadding == codeblockPadding &&
+        typedOther.codeblockDecoration == codeblockDecoration &&
+        typedOther.horizontalRuleDecoration == horizontalRuleDecoration &&
+        typedOther.textAlign == textAlign &&
+        typedOther.h1Align == h1Align &&
+        typedOther.h2Align == h2Align &&
+        typedOther.h3Align == h3Align &&
+        typedOther.h4Align == h4Align &&
+        typedOther.h5Align == h5Align &&
+        typedOther.h6Align == h6Align &&
+        typedOther.unorderedListAlign == unorderedListAlign &&
+        typedOther.orderedListAlign == orderedListAlign &&
+        typedOther.blockquoteAlign == blockquoteAlign &&
+        typedOther.codeblockAlign == codeblockAlign &&
+        typedOther.textScaleFactor == textScaleFactor;
   }
 
   /// Creates a [MarkdownStyleSheet] based on the current style, with the
@@ -454,258 +707,5 @@ class MarkdownStyleSheet {
       codeblockAlign: other.codeblockAlign,
       textScaleFactor: other.textScaleFactor,
     );
-  }
-
-  /// The [TextStyle] to use for `a` elements.
-  final TextStyle? a;
-
-  /// The [TextStyle] to use for `p` elements.
-  final TextStyle? p;
-
-  /// The padding to use for `p` elements.
-  final EdgeInsets? pPadding;
-
-  /// The [TextStyle] to use for `code` elements.
-  final TextStyle? code;
-
-  final EdgeInsets? imgPadding;
-  final EdgeInsets? listPadding;
-
-  /// The [TextStyle] to use for `h1` elements.
-  final TextStyle? h1;
-
-  /// The padding to use for `h1` elements.
-  final EdgeInsets? h1Padding;
-
-  /// The [TextStyle] to use for `h2` elements.
-  final TextStyle? h2;
-
-  /// The padding to use for `h2` elements.
-  final EdgeInsets? h2Padding;
-
-  /// The [TextStyle] to use for `h3` elements.
-  final TextStyle? h3;
-
-  /// The padding to use for `h3` elements.
-  final EdgeInsets? h3Padding;
-
-  /// The [TextStyle] to use for `h4` elements.
-  final TextStyle? h4;
-
-  /// The padding to use for `h4` elements.
-  final EdgeInsets? h4Padding;
-
-  /// The [TextStyle] to use for `h5` elements.
-  final TextStyle? h5;
-
-  /// The padding to use for `h5` elements.
-  final EdgeInsets? h5Padding;
-
-  /// The [TextStyle] to use for `h6` elements.
-  final TextStyle? h6;
-
-  /// The padding to use for `h6` elements.
-  final EdgeInsets? h6Padding;
-
-  /// The [TextStyle] to use for `em` elements.
-  final TextStyle? em;
-
-  /// The [TextStyle] to use for `strong` elements.
-  final TextStyle? strong;
-
-  /// The [TextStyle] to use for `del` elements.
-  final TextStyle? del;
-
-  /// The [TextStyle] to use for `blockquote` elements.
-  final TextStyle? blockquote;
-
-  /// The [TextStyle] to use for `img` elements.
-  final TextStyle? img;
-
-  /// The [TextStyle] to use for `input` elements.
-  final TextStyle? checkbox;
-
-  /// The amount of vertical space to use between block-level elements.
-  final double? blockSpacing;
-
-  /// The amount of horizontal space to indent list items.
-  final double? listIndent;
-
-  /// The [TextStyle] to use for bullets.
-  final TextStyle? listBullet;
-
-  /// The padding to use for bullets.
-  final EdgeInsets? listBulletPadding;
-
-  final double? tableColumnSpacing;
-
-  final Color? tableStripeColor;
-
-  /// The padding to use for `blockquote` elements.
-  final EdgeInsets? blockquotePadding;
-
-  /// The decoration to use behind `blockquote` elements.
-  final Decoration? blockquoteDecoration;
-
-  /// The padding to use for `pre` elements.
-  final EdgeInsets? codeblockPadding;
-
-  /// The decoration to use behind for `pre` elements.
-  final Decoration? codeblockDecoration;
-
-  /// The decoration to use for `hr` elements.
-  final Decoration? horizontalRuleDecoration;
-
-  /// The [WrapAlignment] to use for normal text. Defaults to start.
-  final WrapAlignment textAlign;
-
-  /// The [WrapAlignment] to use for h1 text. Defaults to start.
-  final WrapAlignment h1Align;
-
-  /// The [WrapAlignment] to use for h2 text. Defaults to start.
-  final WrapAlignment h2Align;
-
-  /// The [WrapAlignment] to use for h3 text. Defaults to start.
-  final WrapAlignment h3Align;
-
-  /// The [WrapAlignment] to use for h4 text. Defaults to start.
-  final WrapAlignment h4Align;
-
-  /// The [WrapAlignment] to use for h5 text. Defaults to start.
-  final WrapAlignment h5Align;
-
-  /// The [WrapAlignment] to use for h6 text. Defaults to start.
-  final WrapAlignment h6Align;
-
-  /// The [WrapAlignment] to use for an unordered list. Defaults to start.
-  final WrapAlignment unorderedListAlign;
-
-  /// The [WrapAlignment] to use for an ordered list. Defaults to start.
-  final WrapAlignment orderedListAlign;
-
-  /// The [WrapAlignment] to use for a blockquote. Defaults to start.
-  final WrapAlignment blockquoteAlign;
-
-  /// The [WrapAlignment] to use for a code block. Defaults to start.
-  final WrapAlignment codeblockAlign;
-
-  /// The text scale factor to use in textual elements
-  final double? textScaleFactor;
-
-  /// A [Map] from element name to the corresponding [TextStyle] object.
-  Map<String, TextStyle?> get styles => _styles;
-  Map<String, TextStyle?> _styles;
-
-  @override
-  // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  bool operator ==(dynamic other) {
-    if (identical(this, other)) {
-      return true;
-    }
-    if (other.runtimeType != MarkdownStyleSheet) {
-      return false;
-    }
-    final MarkdownStyleSheet typedOther = other;
-    return typedOther.a == a &&
-        typedOther.p == p &&
-        typedOther.pPadding == pPadding &&
-        typedOther.code == code &&
-        typedOther.imgPadding == imgPadding &&
-        typedOther.listPadding == listPadding &&
-        typedOther.h1 == h1 &&
-        typedOther.h1Padding == h1Padding &&
-        typedOther.h2 == h2 &&
-        typedOther.h2Padding == h2Padding &&
-        typedOther.h3 == h3 &&
-        typedOther.h3Padding == h3Padding &&
-        typedOther.h4 == h4 &&
-        typedOther.h4Padding == h4Padding &&
-        typedOther.h5 == h5 &&
-        typedOther.h5Padding == h5Padding &&
-        typedOther.h6 == h6 &&
-        typedOther.h6Padding == h6Padding &&
-        typedOther.em == em &&
-        typedOther.strong == strong &&
-        typedOther.del == del &&
-        typedOther.blockquote == blockquote &&
-        typedOther.img == img &&
-        typedOther.checkbox == checkbox &&
-        typedOther.blockSpacing == blockSpacing &&
-        typedOther.listIndent == listIndent &&
-        typedOther.listBullet == listBullet &&
-        typedOther.listBulletPadding == listBulletPadding &&
-        typedOther.tableColumnSpacing == tableColumnSpacing &&
-        typedOther.tableStripeColor == tableStripeColor &&
-        typedOther.blockquotePadding == blockquotePadding &&
-        typedOther.blockquoteDecoration == blockquoteDecoration &&
-        typedOther.codeblockPadding == codeblockPadding &&
-        typedOther.codeblockDecoration == codeblockDecoration &&
-        typedOther.horizontalRuleDecoration == horizontalRuleDecoration &&
-        typedOther.textAlign == textAlign &&
-        typedOther.h1Align == h1Align &&
-        typedOther.h2Align == h2Align &&
-        typedOther.h3Align == h3Align &&
-        typedOther.h4Align == h4Align &&
-        typedOther.h5Align == h5Align &&
-        typedOther.h6Align == h6Align &&
-        typedOther.unorderedListAlign == unorderedListAlign &&
-        typedOther.orderedListAlign == orderedListAlign &&
-        typedOther.blockquoteAlign == blockquoteAlign &&
-        typedOther.codeblockAlign == codeblockAlign &&
-        typedOther.textScaleFactor == textScaleFactor;
-  }
-
-  @override
-  // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode {
-    return hashList(<Object?>[
-      a,
-      p,
-      pPadding,
-      code,
-      imgPadding,
-      listPadding,
-      h1,
-      h1Padding,
-      h2,
-      h2Padding,
-      h3,
-      h3Padding,
-      h4,
-      h4Padding,
-      h5,
-      h5Padding,
-      h6,
-      h6Padding,
-      em,
-      strong,
-      del,
-      blockquote,
-      img,
-      checkbox,
-      blockSpacing,
-      listIndent,
-      listBullet,
-      listBulletPadding,
-      tableColumnSpacing,
-      tableStripeColor,
-      blockquotePadding,
-      blockquoteDecoration,
-      codeblockPadding,
-      codeblockDecoration,
-      horizontalRuleDecoration,
-      textAlign,
-      h1Align,
-      h2Align,
-      h3Align,
-      h4Align,
-      h5Align,
-      h6Align,
-      unorderedListAlign,
-      orderedListAlign,
-      blockquoteAlign,
-      codeblockAlign,
-      textScaleFactor,
-    ]);
   }
 }

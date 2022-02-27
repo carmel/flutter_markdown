@@ -29,6 +29,8 @@ class BlockParser {
   /// Gets the current line.
   String get current => lines[_pos];
 
+  bool get isDone => _pos >= lines.length;
+
   /// Gets the line after the current one or `null` if there is none.
   String? get next {
     // Don't read past the end.
@@ -36,26 +38,9 @@ class BlockParser {
     return lines[_pos + 1];
   }
 
-  /// Gets the line that is [linesAhead] lines ahead of the current one, or
-  /// `null` if there is none.
-  ///
-  /// `peek(0)` is equivalent to [current].
-  ///
-  /// `peek(1)` is equivalent to [next].
-  String? peek(int linesAhead) {
-    if (linesAhead < 0) {
-      throw ArgumentError('Invalid linesAhead: $linesAhead; must be >= 0.');
-    }
-    // Don't read past the end.
-    if (_pos >= lines.length - linesAhead) return null;
-    return lines[_pos + linesAhead];
-  }
-
   void advance() {
     _pos++;
   }
-
-  bool get isDone => _pos >= lines.length;
 
   /// Gets whether or not the current line matches the given pattern.
   bool matches(RegExp regex) {
@@ -82,6 +67,21 @@ class BlockParser {
     }
 
     return blocks;
+  }
+
+  /// Gets the line that is [linesAhead] lines ahead of the current one, or
+  /// `null` if there is none.
+  ///
+  /// `peek(0)` is equivalent to [current].
+  ///
+  /// `peek(1)` is equivalent to [next].
+  String? peek(int linesAhead) {
+    if (linesAhead < 0) {
+      throw ArgumentError('Invalid linesAhead: $linesAhead; must be >= 0.');
+    }
+    // Don't read past the end.
+    if (_pos >= lines.length - linesAhead) return null;
+    return lines[_pos + linesAhead];
   }
 }
 
@@ -113,16 +113,16 @@ abstract class BlockSyntax {
     return childLines;
   }
 
-  /// Gets whether or not [parser]'s current line should end the previous block.
-  static bool isAtBlockEnd(BlockParser parser) {
-    if (parser.isDone) return true;
-    return parser.blockSyntaxes.any((s) => s.canParse(parser) && s.canEndBlock(parser));
-  }
-
   /// Generates a valid HTML anchor from the inner text of [element].
   static String generateAnchorHash(MarkedElement element) => element.children!.first.textContent
       .toLowerCase()
       .trim()
       .replaceAll(RegExp(r'[^a-z0-9 _-]'), '')
       .replaceAll(RegExp(r'\s'), '-');
+
+  /// Gets whether or not [parser]'s current line should end the previous block.
+  static bool isAtBlockEnd(BlockParser parser) {
+    if (parser.isDone) return true;
+    return parser.blockSyntaxes.any((s) => s.canParse(parser) && s.canEndBlock(parser));
+  }
 }

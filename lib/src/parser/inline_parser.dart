@@ -9,6 +9,443 @@ import 'document.dart';
 import 'emojis.dart';
 import 'util.dart';
 
+/// Matches autolinks like `http://foo.com`.
+class AutolinkExtensionSyntax extends InlineSyntax {
+  /// Broken up parts of the autolink regex for reusability and readability
+
+  // Autolinks can only come at the beginning of a line, after whitespace, or
+  // any of the delimiting characters *, _, ~, and (.
+  static const start = r'(?:^|[\s*_~(>])';
+
+  // An extended url autolink will be recognized when one of the schemes
+  // http://, https://, or ftp://, followed by a valid domain
+  static const scheme = r'(?:(?:https?|ftp):\/\/|www\.)';
+
+  // A valid domain consists of alphanumeric characters, underscores (_),
+  // hyphens (-) and periods (.). There must be at least one period, and no
+  // underscores may be present in the last two segments of the domain.
+  static const domainPart = r'\w\-';
+  static const domain = '[$domainPart][$domainPart.]+';
+
+  // A valid domain consists of alphanumeric characters, underscores (_),
+  // hyphens (-) and periods (.).
+  static const path = r'[^\s<]*';
+
+  // Trailing punctuation (specifically, ?, !, ., ,, :, *, _, and ~) will not
+  // be considered part of the autolink
+  static const truncatingPunctuationPositive = r'[?!.,:*_~]';
+
+  static final regExpTrailingPunc = RegExp('$truncatingPunctuationPositive*\$');
+  static final regExpEndsWithColon = RegExp(r'\&[a-zA-Z0-9]+;$');
+  static final regExpWhiteSpace = RegExp(r'\s');
+
+  AutolinkExtensionSyntax() : super('$start(($scheme)($domain)($path))');
+
+  @override
+  bool onMatch(InlineParser parser, Match match) {
+    var url = match[1]!;
+    var href = url;
+    var matchLength = url.length;
+
+    if (url[0] == '>' || url.startsWith(regExpWhiteSpace)) {
+      url = url.substring(1, url.length - 1);
+      href = href.substring(1, href.length - 1);
+      parser.pos++;
+      matchLength--;
+    }
+
+    // Prevent accidental standard autolink matches
+    if (url.endsWith('>') && parser.source[parser.pos - 1] == '<') {
+      return false;
+    }
+
+    // When an autolink ends in ), we scan the entire autolink for the total
+    // number of parentheses. If there is a greater number of closing
+    // parentheses than opening ones, we don’t consider the last character
+    // part of the autolink, in order to facilitate including an autolink
+    // inside a parenthesis:
+    // https://github.github.com/gfm/#example-600
+    if (url.endsWith(')')) {
+      final opening = _countChars(url, '(');
+      final closing = _countChars(url, ')');
+
+      if (closing > opening) {
+        url = url.substring(0, url.length - 1);
+        href = href.substring(0, href.length - 1);
+        matchLength--;
+      }
+    }
+
+    // Trailing punctuation (specifically, ?, !, ., ,, :, *, _, and ~) will
+    // not be considered part of the autolink, though they may be included
+    // in the interior of the link:
+    // https://github.github.com/gfm/#example-599
+    final trailingPunc = regExpTrailingPunc.firstMatch(url);
+    if (trailingPunc != null) {
+      final trailingLength = trailingPunc.match.length;
+      url = url.substring(0, url.length - trailingLength);
+      href = href.substring(0, href.length - trailingLength);
+      matchLength -= trailingLength;
+    }
+
+    // If an autolink ends in a semicolon (;), we check to see if it appears
+    // to resemble an
+    // [entity reference](https://github.github.com/gfm/#entity-references);
+    // if the preceding text is & followed by one or more alphanumeric
+    // characters. If so, it is excluded from the autolink:
+    // https://github.github.com/gfm/#example-602
+    if (url.endsWith(';')) {
+      final entityRef = regExpEndsWithColon.firstMatch(url);
+      if (entityRef != null) {
+        // Strip out HTML entity reference
+        final entityRefLength = entityRef.match.length;
+        url = url.substring(0, url.length - entityRefLength);
+        href = href.substring(0, href.length - entityRefLength);
+        matchLength -= entityRefLength;
+      }
+    }
+
+    // The scheme http will be inserted automatically
+    if (!href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('ftp://')) {
+      href = 'http://$href';
+    }
+
+    parser.addNode(MarkedElement.text('a', url)..attributes['href'] = Uri.encodeFull(href));
+
+    parser.consume(matchLength);
+    return false;
+  }
+
+  @override
+  bool tryMatch(InlineParser parser, [int? startMatchPos]) {
+    return super.tryMatch(parser, parser.pos > 0 ? parser.pos - 1 : 0);
+  }
+
+  int _countChars(String input, String char) {
+    var count = 0;
+
+    for (var i = 0; i < input.length; i++) {
+      if (input[i] == char) count++;
+    }
+
+    return count;
+  }
+}
+
+/// Matches autolinks like `<http://foo.com>`.
+class AutolinkSyntax extends InlineSyntax {
+  AutolinkSyntax() : super(r'<(([a-zA-Z][a-zA-Z\-\+\.]+):(?://)?[^\s>]*)>');
+
+  @override
+  bool onMatch(InlineParser parser, Match match) {
+    final url = match[1]!;
+    parser.addNode(MarkedElement.text('a', url)..attributes['href'] = Uri.encodeFull(url));
+
+    return true;
+  }
+}
+
+/// Matches images like `![alternate text](url "optional title")` and
+/// `![alternate text][label]`.
+// class ImageSyntax extends LinkSyntax {
+//   ImageSyntax({Resolver? linkResolver})
+//       : super(linkResolver: linkResolver, pattern: r'!\[', startCharacter: $exclamation);
+
+//   @override
+//   MarkedElement _createNode(String destination, String? title, {required List<MarkedNode> Function() getChildren}) {
+//    final element = MarkedElement.empty('img');
+//    final children = getChildren();
+//     element.attributes['src'] = destination;
+//     element.attributes['alt'] = children.map((node) => node.textContent).join();
+//     if (title != null && title.isNotEmpty) {
+//       element.attributes['title'] = escapeAttribute(title.replaceAll('&', '&amp;'));
+//     }
+//     return element;
+//   }
+// }
+
+/// Matches backtick-enclosed inline code blocks.
+class CodeSyntax extends InlineSyntax {
+  // This pattern matches:
+  //
+  // * a string of backticks (not followed by any more), followed by
+  // * a non-greedy string of anything, including newlines, ending with anything
+  //   except a backtick, followed by
+  // * a string of backticks the same length as the first, not followed by any
+  //   more.
+  //
+  // This conforms to the delimiters of inline code, both in Markdown.pl, and
+  // CommonMark.
+  static const String _pattern = r'(`+(?!`))((?:.|\n)*?[^`])\1(?!`)';
+
+  CodeSyntax() : super(_pattern);
+
+  @override
+  bool onMatch(InlineParser parser, Match match) {
+    parser.addNode(MarkedElement.text('code', match[2]!.trim().replaceAll('\n', ' ')));
+
+    return true;
+  }
+
+  @override
+  bool tryMatch(InlineParser parser, [int? startMatchPos]) {
+    if (parser.pos > 0 && parser.charAt(parser.pos - 1) == $backquote) {
+      // Not really a match! We can't just sneak past one backtick to try the
+      // next character. An example of this situation would be:
+      //
+      //     before ``` and `` after.
+      //             ^--parser.pos
+      return false;
+    }
+
+    final match = pattern.matchAsPrefix(parser.source, parser.pos);
+    if (match == null) {
+      return false;
+    }
+    parser.writeText();
+    if (onMatch(parser, match)) parser.consume(match.match.length);
+    return true;
+  }
+}
+
+/// A delimiter indicating the possible "open" or possible "close" of a tag for
+/// a [TagSyntax].
+abstract class Delimiter {
+  /// The [Text] node representing the plain text representing this delimiter.
+  abstract MarkedText node;
+
+  /// Whether the delimiter is active.
+  ///
+  /// Links cannot be nested, so we must "deactivate" any pending ones. For
+  /// example, take the following text:
+  ///
+  ///     Text [link and [more](links)](links).
+  ///
+  /// Once we have parsed `Text [`, there is one (pending) link in the state
+  /// stack.  It is, by default, active. Once we parse the next possible link,
+  /// `[more](links)`, as a real link, we must deactive the pending links (just
+  /// the one, in this case).
+  abstract bool isActive;
+
+  /// Whether this delimiter can close emphasis or strong emphasis.
+  bool get canClose;
+
+  /// Whether this delimiter can open emphasis or strong emphasis.
+  bool get canOpen;
+
+  /// The type of delimiter.
+  ///
+  /// For the two-character image delimiter, `![`, this is `!`.
+  int get char;
+
+  /// The number of delimiters.
+  int get length;
+
+  /// The syntax which uses this delimiter to parse a tag.
+  TagSyntax get syntax;
+}
+
+/// An implementation of [Delimiter] which uses concepts of "left-flanking" and
+/// "right-flanking" to determine the values of [canOpen] and [canClose].
+///
+/// This is primarily used when parsing emphasis and strong emphasis, but can
+/// also be used by other extensions of [TagSyntax].
+class DelimiterRun implements Delimiter {
+  /// According to
+  /// [CommonMark](https://spec.commonmark.org/0.29/#punctuation-character):
+  ///
+  /// > A punctuation character is an ASCII punctuation character or anything in
+  /// > the general Unicode categories `Pc`, `Pd`, `Pe`, `Pf`, `Pi`, `Po`, or
+  /// > `Ps`.
+  // This RegExp is inspired by
+  // https://github.com/commonmark/commonmark.js/blob/1f7d09099c20d7861a674674a5a88733f55ff729/lib/inlines.js#L39.
+  // I don't know if there is any way to simplify it or maintain it.
+  static final RegExp punctuation = RegExp(r'['
+      r'''!"#$%&'()*+,\-./:;<=>?@\[\]\\^_`{|}~'''
+      r'\xA1\xA7\xAB\xB6\xB7\xBB\xBF\u037E\u0387\u055A-\u055F\u0589\u058A\u05BE'
+      r'\u05C0\u05C3\u05C6\u05F3\u05F4\u0609\u060A\u060C\u060D\u061B\u061E'
+      r'\u061F\u066A-\u066D\u06D4\u0700-\u070D\u07F7-\u07F9\u0830-\u083E\u085E'
+      r'\u0964\u0965\u0970\u0AF0\u0DF4\u0E4F\u0E5A\u0E5B\u0F04-\u0F12\u0F14'
+      r'\u0F3A-\u0F3D\u0F85\u0FD0-\u0FD4\u0FD9\u0FDA\u104A-\u104F\u10FB'
+      r'\u1360-\u1368\u1400\u166D\u166E\u169B\u169C\u16EB-\u16ED\u1735\u1736'
+      r'\u17D4-\u17D6\u17D8-\u17DA\u1800-\u180A\u1944\u1945\u1A1E\u1A1F'
+      r'\u1AA0-\u1AA6\u1AA8-\u1AAD\u1B5A-\u1B60\u1BFC-\u1BFF\u1C3B-\u1C3F\u1C7E'
+      r'\u1C7F\u1CC0-\u1CC7\u1CD3\u2010-\u2027\u2030-\u2043\u2045-\u2051'
+      r'\u2053-\u205E\u207D\u207E\u208D\u208E\u2308-\u230B\u2329\u232A'
+      r'\u2768-\u2775\u27C5\u27C6\u27E6-\u27EF\u2983-\u2998\u29D8-\u29DB\u29FC'
+      r'\u29FD\u2CF9-\u2CFC\u2CFE\u2CFF\u2D70\u2E00-\u2E2E\u2E30-\u2E42'
+      r'\u3001-\u3003\u3008-\u3011\u3014-\u301F\u3030\u303D\u30A0\u30FB\uA4FE'
+      r'\uA4FF\uA60D-\uA60F\uA673\uA67E\uA6F2-\uA6F7\uA874-\uA877\uA8CE\uA8CF'
+      r'\uA8F8-\uA8FA\uA8FC\uA92E\uA92F\uA95F\uA9C1-\uA9CD\uA9DE\uA9DF'
+      r'\uAA5C-\uAA5F\uAADE\uAADF\uAAF0\uAAF1\uABEB\uFD3E\uFD3F\uFE10-\uFE19'
+      r'\uFE30-\uFE52\uFE54-\uFE61\uFE63\uFE68\uFE6A\uFE6B\uFF01-\uFF03'
+      r'\uFF05-\uFF0A\uFF0C-\uFF0F\uFF1A\uFF1B\uFF1F\uFF20\uFF3B-\uFF3D\uFF3F'
+      r'\uFF5B\uFF5D\uFF5F-\uFF65'
+      ']');
+
+  // TODO(srawlins): Unicode whitespace
+  static const String whitespace = ' \t\r\n';
+
+  @override
+  MarkedText node;
+
+  @override
+  final int char;
+
+  @override
+  bool isActive;
+
+  @override
+  final TagSyntax syntax;
+
+  final bool allowIntraWord;
+
+  @override
+  final bool canOpen;
+
+  @override
+  final bool canClose;
+
+  DelimiterRun._({
+    required this.node,
+    required this.char,
+    required this.syntax,
+    required bool isLeftFlanking,
+    required bool isRightFlanking,
+    required bool isPrecededByPunctuation,
+    required bool isFollowedByPunctuation,
+    required this.allowIntraWord,
+  })  : canOpen =
+            isLeftFlanking && (char == $asterisk || !isRightFlanking || allowIntraWord || isPrecededByPunctuation),
+        canClose =
+            isRightFlanking && (char == $asterisk || !isLeftFlanking || allowIntraWord || isFollowedByPunctuation),
+        isActive = true;
+
+  @override
+  int get length => node.text.length;
+
+  @override
+  String toString() => '<char: $char, length: $length, canOpen: $canOpen, '
+      'canClose: $canClose>';
+
+  /// Tries to parse a delimiter run from [runStart] (inclusive) to [runEnd]
+  /// (exclusive).
+  static DelimiterRun? tryParse(InlineParser parser, int runStart, int runEnd,
+      {required TagSyntax syntax, required MarkedText node, bool allowIntraWord = false}) {
+    bool leftFlanking, rightFlanking, precededByPunctuation, followedByPunctuation;
+    String preceding, following;
+    if (runStart == 0) {
+      rightFlanking = false;
+      preceding = '\n';
+    } else {
+      preceding = parser.source.substring(runStart - 1, runStart);
+    }
+    precededByPunctuation = punctuation.hasMatch(preceding);
+
+    if (runEnd == parser.source.length) {
+      leftFlanking = false;
+      following = '\n';
+    } else {
+      following = parser.source.substring(runEnd, runEnd + 1);
+    }
+    followedByPunctuation = punctuation.hasMatch(following);
+
+    // http://spec.commonmark.org/0.28/#left-flanking-delimiter-run
+    if (whitespace.contains(following)) {
+      leftFlanking = false;
+    } else {
+      leftFlanking =
+          !followedByPunctuation || whitespace.contains(preceding) || precededByPunctuation || allowIntraWord;
+    }
+
+    // http://spec.commonmark.org/0.28/#right-flanking-delimiter-run
+    if (whitespace.contains(preceding)) {
+      rightFlanking = false;
+    } else {
+      rightFlanking =
+          !precededByPunctuation || whitespace.contains(following) || followedByPunctuation || allowIntraWord;
+    }
+
+    if (!leftFlanking && !rightFlanking) {
+      // Could not parse a delimiter run.
+      return null;
+    }
+
+    return DelimiterRun._(
+      node: node,
+      char: parser.charAt(runStart),
+      syntax: syntax,
+      isLeftFlanking: leftFlanking,
+      isRightFlanking: rightFlanking,
+      isPrecededByPunctuation: precededByPunctuation,
+      isFollowedByPunctuation: followedByPunctuation,
+      allowIntraWord: allowIntraWord,
+    );
+  }
+}
+
+/// Matches autolinks like `<foo@bar.example.com>`.
+///
+/// See <http://spec.commonmark.org/0.28/#email-address>.
+class EmailAutolinkSyntax extends InlineSyntax {
+  static const _email = r'''[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}'''
+      r'''[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*''';
+
+  EmailAutolinkSyntax() : super('<($_email)>', startCharacter: $lt);
+
+  @override
+  bool onMatch(InlineParser parser, Match match) {
+    final url = match[1]!;
+
+    parser.addNode(MarkedElement.text('a', url)..attributes['href'] = Uri.encodeFull('mailto:$url'));
+
+    return true;
+  }
+}
+
+/// Matches GitHub Markdown emoji syntax like `:smile:`.
+///
+/// There is no formal specification of GitHub's support for this colon-based
+/// emoji support, so this syntax is based on the results of Markdown-enabled
+/// text fields at github.com.
+class EmojiSyntax extends InlineSyntax {
+  // Emoji "aliases" are mostly limited to lower-case letters, numbers, and
+  // underscores, but GitHub also supports `:+1:` and `:-1:`.
+  EmojiSyntax() : super(':([a-z0-9_+-]+):');
+
+  @override
+  bool onMatch(InlineParser parser, Match match) {
+    final alias = match[1]!;
+    final emoji = emojis[alias];
+    if (emoji == null) {
+      parser.advanceBy(1);
+      return false;
+    }
+    parser.addNode(MarkedText(emoji));
+
+    return true;
+  }
+}
+
+/// Escape punctuation preceded by a backslash.
+class EscapeSyntax extends InlineSyntax {
+  EscapeSyntax() : super(r'''\\[!"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~]''');
+
+  @override
+  bool onMatch(InlineParser parser, Match match) {
+    final chars = match.match;
+    parser.addNode(MarkedText(chars[1]));
+    return true;
+  }
+}
+
+class InlineLink {
+  final String destination;
+  final String? title;
+
+  InlineLink(this.destination, {this.title});
+}
+
 /// Maintains the internal state needed to parse inline span elements in
 /// Markdown.
 class InlineParser {
@@ -58,6 +495,24 @@ class InlineParser {
     ]);
   }
 
+  bool get isDone => pos == source.length;
+
+  /// Add [node] to the last [TagState] on the stack.
+  void addNode(MarkedNode node) {
+    _tree.add(node);
+  }
+
+  void advanceBy(int length) {
+    pos += length;
+  }
+
+  int charAt(int index) => source.codeUnitAt(index);
+
+  void consume(int length) {
+    pos += length;
+    start = pos;
+  }
+
   List<MarkedNode> parse() {
     while (!isDone) {
       // A right bracket (']') is special. Hitting this character triggers the
@@ -81,6 +536,46 @@ class InlineParser {
     _processEmphasis(-1);
     _combineAdjacentText(_tree);
     return _tree;
+  }
+
+  void writeText() {
+    if (pos == start) {
+      return;
+    }
+    final text = source.substring(start, pos);
+    _tree.add(MarkedText(text));
+    start = pos;
+  }
+
+  /// Rules 9 and 10.
+  bool _canFormEmphasis(Delimiter opener, Delimiter closer) {
+    if ((opener.canOpen && opener.canClose) || (closer.canOpen && closer.canClose)) {
+      return (opener.length + closer.length) % 3 != 0 || (opener.length % 3 == 0 && closer.length % 3 == 0);
+    } else {
+      return true;
+    }
+  }
+
+  // Combine any remaining adjacent Text nodes. This is important to produce
+  // correct output across newlines, where whitespace is sometimes compressed.
+  void _combineAdjacentText(List<MarkedNode?> nodes) {
+    for (var i = 0; i < nodes.length - 1; i++) {
+      final node = nodes[i];
+      if (node is MarkedElement && node.children != null) {
+        _combineAdjacentText(node.children!);
+        continue;
+      }
+      if (node is MarkedText && nodes[i + 1] is MarkedText) {
+        final buffer = StringBuffer('${node.textContent}${nodes[i + 1]!.textContent}');
+        var j = i + 2;
+        while (j < nodes.length && nodes[j] is MarkedText) {
+          buffer.write(nodes[j]!.textContent);
+          j++;
+        }
+        nodes[i] = MarkedText(buffer.toString());
+        nodes.removeRange(i + 1, j);
+      }
+    }
   }
 
   /// Look back through the delimiter stack to see if we've found a link or
@@ -134,15 +629,6 @@ class InlineParser {
     } else {
       throw StateError('Non-link syntax delimiter found with character '
           '"${delimiter.char}"');
-    }
-  }
-
-  /// Rules 9 and 10.
-  bool _canFormEmphasis(Delimiter opener, Delimiter closer) {
-    if ((opener.canOpen && opener.canClose) || (closer.canOpen && closer.canClose)) {
-      return (opener.length + closer.length) % 3 != 0 || (opener.length % 3 == 0 && closer.length % 3 == 0);
-    } else {
-      return true;
     }
   }
 
@@ -234,57 +720,8 @@ class InlineParser {
     _delimiterStack.removeRange(bottomIndex + 1, _delimiterStack.length);
   }
 
-  // Combine any remaining adjacent Text nodes. This is important to produce
-  // correct output across newlines, where whitespace is sometimes compressed.
-  void _combineAdjacentText(List<MarkedNode?> nodes) {
-    for (var i = 0; i < nodes.length - 1; i++) {
-      final node = nodes[i];
-      if (node is MarkedElement && node.children != null) {
-        _combineAdjacentText(node.children!);
-        continue;
-      }
-      if (node is MarkedText && nodes[i + 1] is MarkedText) {
-        final buffer = StringBuffer('${node.textContent}${nodes[i + 1]!.textContent}');
-        var j = i + 2;
-        while (j < nodes.length && nodes[j] is MarkedText) {
-          buffer.write(nodes[j]!.textContent);
-          j++;
-        }
-        nodes[i] = MarkedText(buffer.toString());
-        nodes.removeRange(i + 1, j);
-      }
-    }
-  }
-
-  int charAt(int index) => source.codeUnitAt(index);
-
-  void writeText() {
-    if (pos == start) {
-      return;
-    }
-    final text = source.substring(start, pos);
-    _tree.add(MarkedText(text));
-    start = pos;
-  }
-
-  /// Add [node] to the last [TagState] on the stack.
-  void addNode(MarkedNode node) {
-    _tree.add(node);
-  }
-
   /// Push [state] onto the stack of [TagState]s.
   void _pushDelimiter(Delimiter delimiter) => _delimiterStack.add(delimiter);
-
-  bool get isDone => pos == source.length;
-
-  void advanceBy(int length) {
-    pos += length;
-  }
-
-  void consume(int length) {
-    pos += length;
-    start = pos;
-  }
 }
 
 /// Represents one kind of Markdown tag that can be parsed.
@@ -302,6 +739,12 @@ abstract class InlineSyntax {
   InlineSyntax(String pattern, {int? startCharacter})
       : pattern = RegExp(pattern, multiLine: true),
         _startCharacter = startCharacter;
+
+  /// Processes [match], adding nodes to [parser] and possibly advancing
+  /// [parser].
+  ///
+  /// Returns whether the caller should advance [parser] by `match[0].length`.
+  bool onMatch(InlineParser parser, Match match);
 
   /// Tries to match at the parser's current position.
   ///
@@ -326,12 +769,6 @@ abstract class InlineSyntax {
     if (onMatch(parser, startMatch)) parser.consume(startMatch.match.length);
     return true;
   }
-
-  /// Processes [match], adding nodes to [parser] and possibly advancing
-  /// [parser].
-  ///
-  /// Returns whether the caller should advance [parser] by `match[0].length`.
-  bool onMatch(InlineParser parser, Match match);
 }
 
 /// Represents a hard line break.
@@ -343,500 +780,6 @@ class LineBreakSyntax extends InlineSyntax {
   bool onMatch(InlineParser parser, Match match) {
     parser.addNode(MarkedElement.empty('br'));
     return true;
-  }
-}
-
-/// Matches stuff that should just be passed through as straight text.
-class TextSyntax extends InlineSyntax {
-  final String substitute;
-
-  /// Create a new [TextSyntax] which matches text on [pattern].
-  ///
-  /// If [sub] is passed, it is used as a simple replacement for [pattern]. If
-  /// [startCharacter] is passed, it is used as a pre-matching check which is
-  /// faster than matching against [pattern].
-  TextSyntax(String pattern, {String sub = '', int? startCharacter})
-      : substitute = sub,
-        super(pattern, startCharacter: startCharacter);
-
-  /// Adds a [Text] node to [parser] and returns `true` if there is a
-  /// [substitute], as long as the preceding character (if any) is not a `/`.
-  ///
-  /// Otherwise, the parser is advanced by the length of [match] and `false` is
-  /// returned.
-  @override
-  bool onMatch(InlineParser parser, Match match) {
-    if (substitute.isEmpty || (match.start > 0 && match.input.substring(match.start - 1, match.start) == '/')) {
-      // Just use the original matched text.
-      parser.advanceBy(match.match.length);
-      return false;
-    }
-
-    // Insert the substitution.
-    parser.addNode(MarkedText(substitute));
-    return true;
-  }
-}
-
-/// Escape punctuation preceded by a backslash.
-class EscapeSyntax extends InlineSyntax {
-  EscapeSyntax() : super(r'''\\[!"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~]''');
-
-  @override
-  bool onMatch(InlineParser parser, Match match) {
-    final chars = match.match;
-    parser.addNode(MarkedText(chars[1]));
-    return true;
-  }
-}
-
-/// Matches autolinks like `<foo@bar.example.com>`.
-///
-/// See <http://spec.commonmark.org/0.28/#email-address>.
-class EmailAutolinkSyntax extends InlineSyntax {
-  static const _email = r'''[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}'''
-      r'''[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*''';
-
-  EmailAutolinkSyntax() : super('<($_email)>', startCharacter: $lt);
-
-  @override
-  bool onMatch(InlineParser parser, Match match) {
-    final url = match[1]!;
-
-    parser.addNode(MarkedElement.text('a', url)..attributes['href'] = Uri.encodeFull('mailto:$url'));
-
-    return true;
-  }
-}
-
-/// Matches autolinks like `<http://foo.com>`.
-class AutolinkSyntax extends InlineSyntax {
-  AutolinkSyntax() : super(r'<(([a-zA-Z][a-zA-Z\-\+\.]+):(?://)?[^\s>]*)>');
-
-  @override
-  bool onMatch(InlineParser parser, Match match) {
-    final url = match[1]!;
-    parser.addNode(MarkedElement.text('a', url)..attributes['href'] = Uri.encodeFull(url));
-
-    return true;
-  }
-}
-
-/// Matches autolinks like `http://foo.com`.
-class AutolinkExtensionSyntax extends InlineSyntax {
-  /// Broken up parts of the autolink regex for reusability and readability
-
-  // Autolinks can only come at the beginning of a line, after whitespace, or
-  // any of the delimiting characters *, _, ~, and (.
-  static const start = r'(?:^|[\s*_~(>])';
-
-  // An extended url autolink will be recognized when one of the schemes
-  // http://, https://, or ftp://, followed by a valid domain
-  static const scheme = r'(?:(?:https?|ftp):\/\/|www\.)';
-
-  // A valid domain consists of alphanumeric characters, underscores (_),
-  // hyphens (-) and periods (.). There must be at least one period, and no
-  // underscores may be present in the last two segments of the domain.
-  static const domainPart = r'\w\-';
-  static const domain = '[$domainPart][$domainPart.]+';
-
-  // A valid domain consists of alphanumeric characters, underscores (_),
-  // hyphens (-) and periods (.).
-  static const path = r'[^\s<]*';
-
-  // Trailing punctuation (specifically, ?, !, ., ,, :, *, _, and ~) will not
-  // be considered part of the autolink
-  static const truncatingPunctuationPositive = r'[?!.,:*_~]';
-
-  static final regExpTrailingPunc = RegExp('$truncatingPunctuationPositive*\$');
-  static final regExpEndsWithColon = RegExp(r'\&[a-zA-Z0-9]+;$');
-  static final regExpWhiteSpace = RegExp(r'\s');
-
-  AutolinkExtensionSyntax() : super('$start(($scheme)($domain)($path))');
-
-  @override
-  bool tryMatch(InlineParser parser, [int? startMatchPos]) {
-    return super.tryMatch(parser, parser.pos > 0 ? parser.pos - 1 : 0);
-  }
-
-  @override
-  bool onMatch(InlineParser parser, Match match) {
-    var url = match[1]!;
-    var href = url;
-    var matchLength = url.length;
-
-    if (url[0] == '>' || url.startsWith(regExpWhiteSpace)) {
-      url = url.substring(1, url.length - 1);
-      href = href.substring(1, href.length - 1);
-      parser.pos++;
-      matchLength--;
-    }
-
-    // Prevent accidental standard autolink matches
-    if (url.endsWith('>') && parser.source[parser.pos - 1] == '<') {
-      return false;
-    }
-
-    // When an autolink ends in ), we scan the entire autolink for the total
-    // number of parentheses. If there is a greater number of closing
-    // parentheses than opening ones, we don’t consider the last character
-    // part of the autolink, in order to facilitate including an autolink
-    // inside a parenthesis:
-    // https://github.github.com/gfm/#example-600
-    if (url.endsWith(')')) {
-      final opening = _countChars(url, '(');
-      final closing = _countChars(url, ')');
-
-      if (closing > opening) {
-        url = url.substring(0, url.length - 1);
-        href = href.substring(0, href.length - 1);
-        matchLength--;
-      }
-    }
-
-    // Trailing punctuation (specifically, ?, !, ., ,, :, *, _, and ~) will
-    // not be considered part of the autolink, though they may be included
-    // in the interior of the link:
-    // https://github.github.com/gfm/#example-599
-    final trailingPunc = regExpTrailingPunc.firstMatch(url);
-    if (trailingPunc != null) {
-      final trailingLength = trailingPunc.match.length;
-      url = url.substring(0, url.length - trailingLength);
-      href = href.substring(0, href.length - trailingLength);
-      matchLength -= trailingLength;
-    }
-
-    // If an autolink ends in a semicolon (;), we check to see if it appears
-    // to resemble an
-    // [entity reference](https://github.github.com/gfm/#entity-references);
-    // if the preceding text is & followed by one or more alphanumeric
-    // characters. If so, it is excluded from the autolink:
-    // https://github.github.com/gfm/#example-602
-    if (url.endsWith(';')) {
-      final entityRef = regExpEndsWithColon.firstMatch(url);
-      if (entityRef != null) {
-        // Strip out HTML entity reference
-        final entityRefLength = entityRef.match.length;
-        url = url.substring(0, url.length - entityRefLength);
-        href = href.substring(0, href.length - entityRefLength);
-        matchLength -= entityRefLength;
-      }
-    }
-
-    // The scheme http will be inserted automatically
-    if (!href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('ftp://')) {
-      href = 'http://$href';
-    }
-
-    parser.addNode(MarkedElement.text('a', url)..attributes['href'] = Uri.encodeFull(href));
-
-    parser.consume(matchLength);
-    return false;
-  }
-
-  int _countChars(String input, String char) {
-    var count = 0;
-
-    for (var i = 0; i < input.length; i++) {
-      if (input[i] == char) count++;
-    }
-
-    return count;
-  }
-}
-
-/// A delimiter indicating the possible "open" or possible "close" of a tag for
-/// a [TagSyntax].
-abstract class Delimiter {
-  /// The [Text] node representing the plain text representing this delimiter.
-  abstract MarkedText node;
-
-  /// The type of delimiter.
-  ///
-  /// For the two-character image delimiter, `![`, this is `!`.
-  int get char;
-
-  /// The number of delimiters.
-  int get length;
-
-  /// Whether the delimiter is active.
-  ///
-  /// Links cannot be nested, so we must "deactivate" any pending ones. For
-  /// example, take the following text:
-  ///
-  ///     Text [link and [more](links)](links).
-  ///
-  /// Once we have parsed `Text [`, there is one (pending) link in the state
-  /// stack.  It is, by default, active. Once we parse the next possible link,
-  /// `[more](links)`, as a real link, we must deactive the pending links (just
-  /// the one, in this case).
-  abstract bool isActive;
-
-  /// Whether this delimiter can open emphasis or strong emphasis.
-  bool get canOpen;
-
-  /// Whether this delimiter can close emphasis or strong emphasis.
-  bool get canClose;
-
-  /// The syntax which uses this delimiter to parse a tag.
-  TagSyntax get syntax;
-}
-
-/// A simple delimiter implements the [Delimiter] interface with basic fields,
-/// and does not have the concept of "left-flanking" or "right-flanking".
-class SimpleDelimiter implements Delimiter {
-  @override
-  MarkedText node;
-
-  @override
-  final int char;
-
-  @override
-  final int length;
-
-  @override
-  bool isActive;
-
-  @override
-  final bool canOpen;
-
-  @override
-  final bool canClose;
-
-  @override
-  final TagSyntax syntax;
-
-  final int endPos;
-
-  SimpleDelimiter(
-      {required this.node,
-      required this.char,
-      required this.length,
-      required this.canOpen,
-      required this.canClose,
-      required this.syntax,
-      required this.endPos})
-      : isActive = true;
-}
-
-/// An implementation of [Delimiter] which uses concepts of "left-flanking" and
-/// "right-flanking" to determine the values of [canOpen] and [canClose].
-///
-/// This is primarily used when parsing emphasis and strong emphasis, but can
-/// also be used by other extensions of [TagSyntax].
-class DelimiterRun implements Delimiter {
-  /// According to
-  /// [CommonMark](https://spec.commonmark.org/0.29/#punctuation-character):
-  ///
-  /// > A punctuation character is an ASCII punctuation character or anything in
-  /// > the general Unicode categories `Pc`, `Pd`, `Pe`, `Pf`, `Pi`, `Po`, or
-  /// > `Ps`.
-  // This RegExp is inspired by
-  // https://github.com/commonmark/commonmark.js/blob/1f7d09099c20d7861a674674a5a88733f55ff729/lib/inlines.js#L39.
-  // I don't know if there is any way to simplify it or maintain it.
-  static final RegExp punctuation = RegExp(r'['
-      r'''!"#$%&'()*+,\-./:;<=>?@\[\]\\^_`{|}~'''
-      r'\xA1\xA7\xAB\xB6\xB7\xBB\xBF\u037E\u0387\u055A-\u055F\u0589\u058A\u05BE'
-      r'\u05C0\u05C3\u05C6\u05F3\u05F4\u0609\u060A\u060C\u060D\u061B\u061E'
-      r'\u061F\u066A-\u066D\u06D4\u0700-\u070D\u07F7-\u07F9\u0830-\u083E\u085E'
-      r'\u0964\u0965\u0970\u0AF0\u0DF4\u0E4F\u0E5A\u0E5B\u0F04-\u0F12\u0F14'
-      r'\u0F3A-\u0F3D\u0F85\u0FD0-\u0FD4\u0FD9\u0FDA\u104A-\u104F\u10FB'
-      r'\u1360-\u1368\u1400\u166D\u166E\u169B\u169C\u16EB-\u16ED\u1735\u1736'
-      r'\u17D4-\u17D6\u17D8-\u17DA\u1800-\u180A\u1944\u1945\u1A1E\u1A1F'
-      r'\u1AA0-\u1AA6\u1AA8-\u1AAD\u1B5A-\u1B60\u1BFC-\u1BFF\u1C3B-\u1C3F\u1C7E'
-      r'\u1C7F\u1CC0-\u1CC7\u1CD3\u2010-\u2027\u2030-\u2043\u2045-\u2051'
-      r'\u2053-\u205E\u207D\u207E\u208D\u208E\u2308-\u230B\u2329\u232A'
-      r'\u2768-\u2775\u27C5\u27C6\u27E6-\u27EF\u2983-\u2998\u29D8-\u29DB\u29FC'
-      r'\u29FD\u2CF9-\u2CFC\u2CFE\u2CFF\u2D70\u2E00-\u2E2E\u2E30-\u2E42'
-      r'\u3001-\u3003\u3008-\u3011\u3014-\u301F\u3030\u303D\u30A0\u30FB\uA4FE'
-      r'\uA4FF\uA60D-\uA60F\uA673\uA67E\uA6F2-\uA6F7\uA874-\uA877\uA8CE\uA8CF'
-      r'\uA8F8-\uA8FA\uA8FC\uA92E\uA92F\uA95F\uA9C1-\uA9CD\uA9DE\uA9DF'
-      r'\uAA5C-\uAA5F\uAADE\uAADF\uAAF0\uAAF1\uABEB\uFD3E\uFD3F\uFE10-\uFE19'
-      r'\uFE30-\uFE52\uFE54-\uFE61\uFE63\uFE68\uFE6A\uFE6B\uFF01-\uFF03'
-      r'\uFF05-\uFF0A\uFF0C-\uFF0F\uFF1A\uFF1B\uFF1F\uFF20\uFF3B-\uFF3D\uFF3F'
-      r'\uFF5B\uFF5D\uFF5F-\uFF65'
-      ']');
-
-  // TODO(srawlins): Unicode whitespace
-  static const String whitespace = ' \t\r\n';
-
-  @override
-  MarkedText node;
-
-  @override
-  final int char;
-
-  @override
-  int get length => node.text.length;
-
-  @override
-  bool isActive;
-
-  @override
-  final TagSyntax syntax;
-
-  final bool allowIntraWord;
-
-  @override
-  final bool canOpen;
-
-  @override
-  final bool canClose;
-
-  DelimiterRun._({
-    required this.node,
-    required this.char,
-    required this.syntax,
-    required bool isLeftFlanking,
-    required bool isRightFlanking,
-    required bool isPrecededByPunctuation,
-    required bool isFollowedByPunctuation,
-    required this.allowIntraWord,
-  })  : canOpen =
-            isLeftFlanking && (char == $asterisk || !isRightFlanking || allowIntraWord || isPrecededByPunctuation),
-        canClose =
-            isRightFlanking && (char == $asterisk || !isLeftFlanking || allowIntraWord || isFollowedByPunctuation),
-        isActive = true;
-
-  /// Tries to parse a delimiter run from [runStart] (inclusive) to [runEnd]
-  /// (exclusive).
-  static DelimiterRun? tryParse(InlineParser parser, int runStart, int runEnd,
-      {required TagSyntax syntax, required MarkedText node, bool allowIntraWord = false}) {
-    bool leftFlanking, rightFlanking, precededByPunctuation, followedByPunctuation;
-    String preceding, following;
-    if (runStart == 0) {
-      rightFlanking = false;
-      preceding = '\n';
-    } else {
-      preceding = parser.source.substring(runStart - 1, runStart);
-    }
-    precededByPunctuation = punctuation.hasMatch(preceding);
-
-    if (runEnd == parser.source.length) {
-      leftFlanking = false;
-      following = '\n';
-    } else {
-      following = parser.source.substring(runEnd, runEnd + 1);
-    }
-    followedByPunctuation = punctuation.hasMatch(following);
-
-    // http://spec.commonmark.org/0.28/#left-flanking-delimiter-run
-    if (whitespace.contains(following)) {
-      leftFlanking = false;
-    } else {
-      leftFlanking =
-          !followedByPunctuation || whitespace.contains(preceding) || precededByPunctuation || allowIntraWord;
-    }
-
-    // http://spec.commonmark.org/0.28/#right-flanking-delimiter-run
-    if (whitespace.contains(preceding)) {
-      rightFlanking = false;
-    } else {
-      rightFlanking =
-          !precededByPunctuation || whitespace.contains(following) || followedByPunctuation || allowIntraWord;
-    }
-
-    if (!leftFlanking && !rightFlanking) {
-      // Could not parse a delimiter run.
-      return null;
-    }
-
-    return DelimiterRun._(
-      node: node,
-      char: parser.charAt(runStart),
-      syntax: syntax,
-      isLeftFlanking: leftFlanking,
-      isRightFlanking: rightFlanking,
-      isPrecededByPunctuation: precededByPunctuation,
-      isFollowedByPunctuation: followedByPunctuation,
-      allowIntraWord: allowIntraWord,
-    );
-  }
-
-  @override
-  String toString() => '<char: $char, length: $length, canOpen: $canOpen, '
-      'canClose: $canClose>';
-}
-
-/// Matches syntax that has a pair of tags and becomes an element, like `*` for
-/// `<em>`. Allows nested tags.
-class TagSyntax extends InlineSyntax {
-  /// Whether this is parsed according to the same nesting rules as [emphasis
-  /// delimiters][].
-  ///
-  /// [emphasis delimiters]: http://spec.commonmark.org/0.28/#can-open-emphasis
-  final bool requiresDelimiterRun;
-
-  /// Whether to allow intra-word delimiter runs. CommonMark emphasis and
-  /// strong emphasis does not allow this, but GitHub-Flavored Markdown allows
-  /// it on strikethrough.
-  final bool allowIntraWord;
-
-  /// Create a new [TagSyntax] which matches text on [pattern].
-  ///
-  /// If [end] is passed, it is used as the pattern which denotes the end of
-  /// matching text. Otherwise, [pattern] is used. If [requiresDelimiterRun] is
-  /// passed, this syntax parses according to the same nesting rules as
-  /// emphasis delimiters.  If [startCharacter] is passed, it is used as a
-  /// pre-matching check which is faster than matching against [pattern].
-  TagSyntax(String pattern, {this.requiresDelimiterRun = false, int? startCharacter, this.allowIntraWord = false})
-      : super(pattern, startCharacter: startCharacter);
-
-  @override
-  bool onMatch(InlineParser parser, Match match) {
-    final runLength = match.group(0)!.length;
-    final matchStart = parser.pos;
-    final matchEnd = parser.pos + runLength;
-    final text = MarkedText(parser.source.substring(matchStart, matchEnd));
-    if (!requiresDelimiterRun) {
-      parser._pushDelimiter(SimpleDelimiter(
-          node: text,
-          length: runLength,
-          char: parser.source.codeUnitAt(matchStart),
-          canOpen: true,
-          canClose: false,
-          syntax: this,
-          endPos: matchEnd));
-      parser.addNode(text);
-      return true;
-    }
-
-    final delimiterRun =
-        DelimiterRun.tryParse(parser, matchStart, matchEnd, syntax: this, node: text, allowIntraWord: allowIntraWord);
-    if (delimiterRun != null) {
-      parser._pushDelimiter(delimiterRun);
-      parser.addNode(text);
-      return true;
-    } else {
-      parser.advanceBy(runLength);
-      return false;
-    }
-  }
-
-  /// Attempts to close this tag at the current position.
-  ///
-  /// If a tag cannot be closed at the current position (for example, if a link
-  /// reference cannot be found for a link tag's label), then `null` is
-  /// returned.
-  ///
-  /// If a tag can be closed at the current position, then this method calls
-  /// [getChildren], in which [parser] parses any nested text into child nodes.
-  /// The returned [MarkedNode] incorpororates these child nodes.
-  MarkedNode? close(InlineParser parser, Delimiter opener, Delimiter closer,
-      {required List<MarkedNode> Function() getChildren}) {
-    final strong = opener.length >= 2 && closer.length >= 2;
-    return MarkedElement(strong ? 'strong' : 'em', getChildren());
-  }
-}
-
-/// Matches strikethrough syntax according to the GFM spec.
-class StrikethroughSyntax extends TagSyntax {
-  StrikethroughSyntax() : super('~+', requiresDelimiterRun: true, allowIntraWord: true);
-
-  @override
-  MarkedNode close(InlineParser parser, Delimiter opener, Delimiter closer,
-      {required List<MarkedNode> Function() getChildren}) {
-    return MarkedElement('del', getChildren());
   }
 }
 
@@ -905,38 +848,6 @@ class LinkSyntax extends TagSyntax {
     return _tryCreateReferenceLink(parser, text, getChildren: getChildren);
   }
 
-  /// Resolve a possible reference link.
-  ///
-  /// Uses [linkReferences], [linkResolver], and [_createNode] to try to
-  /// resolve [label] into a [MarkedNode]. If [label] is defined in
-  /// [linkReferences] or can be resolved by [linkResolver], returns a [MarkedNode]
-  /// that links to the resolved URL.
-  ///
-  /// Otherwise, returns `null`.
-  ///
-  /// [label] does not need to be normalized.
-  MarkedNode? _resolveReferenceLink(String label, Map<String, LinkReference> linkReferences,
-      {List<MarkedNode> Function()? getChildren}) {
-    final linkReference = linkReferences[normalizeLinkLabel(label)];
-    if (linkReference != null) {
-      return _createNode(linkReference.destination, linkReference.title, getChildren: getChildren!);
-    } else {
-      // This link has no reference definition. But we allow users of the
-      // library to specify a custom resolver function ([linkResolver]) that
-      // may choose to handle this. Otherwise, it's just treated as plain
-      // text.
-
-      // Normally, label text does not get parsed as inline Markdown. However,
-      // for the benefit of the link resolver, we need to at least escape
-      // brackets, so that, e.g. a link resolver can receive `[\[\]]` as `[]`.
-      final resolved = linkResolver(label.replaceAll(r'\\', r'\').replaceAll(r'\[', '[').replaceAll(r'\]', ']'));
-      if (resolved != null) {
-        getChildren!();
-      }
-      return resolved;
-    }
-  }
-
   /// Create the node represented by a Markdown link.
   MarkedNode _createNode(String destination, String? title, {required List<MarkedNode> Function() getChildren}) {
     final children = getChildren();
@@ -948,136 +859,14 @@ class LinkSyntax extends TagSyntax {
     return element;
   }
 
-  /// Tries to create a reference link node.
-  ///
-  /// Returns the link if it was successfully created, `null` otherwise.
-  MarkedNode? _tryCreateReferenceLink(InlineParser parser, String label,
-      {required List<MarkedNode> Function() getChildren}) {
-    return _resolveReferenceLink(label, parser.document.linkReferences, getChildren: getChildren);
-  }
-
-  // Tries to create an inline link node.
-  //
-  /// Returns the link if it was successfully created, `null` otherwise.
-  MarkedNode _tryCreateInlineLink(InlineParser parser, InlineLink link,
-      {required List<MarkedNode> Function() getChildren}) {
-    return _createNode(link.destination, link.title, getChildren: getChildren);
-  }
-
-  /// Parse a reference link label at the current position.
-  ///
-  /// Specifically, [parser.pos] is expected to be pointing at the `[` which
-  /// opens the link label.
-  ///
-  /// Returns the label if it could be parsed, or `null` if not.
-  String? _parseReferenceLinkLabel(InlineParser parser) {
-    // Walk past the opening `[`.
-    parser.advanceBy(1);
-    if (parser.isDone) return null;
-
-    final buffer = StringBuffer();
-    while (true) {
+  // Walk the parser forward through any whitespace.
+  void _moveThroughWhitespace(InlineParser parser) {
+    while (!parser.isDone) {
       final char = parser.charAt(parser.pos);
-      if (char == $backslash) {
-        parser.advanceBy(1);
-        final next = parser.charAt(parser.pos);
-        if (next != $backslash && next != $rbracket) {
-          buffer.writeCharCode(char);
-        }
-        buffer.writeCharCode(next);
-      } else if (char == $rbracket) {
-        break;
-      } else {
-        buffer.writeCharCode(char);
+      if (char != $space && char != $tab && char != $lf && char != $vt && char != $cr && char != $ff) {
+        return;
       }
       parser.advanceBy(1);
-      if (parser.isDone) return null;
-      // TODO(srawlins): only check 999 characters, for performance reasons?
-    }
-
-    final label = buffer.toString();
-
-    // A link label must contain at least one non-whitespace character.
-    if (_entirelyWhitespacePattern.hasMatch(label)) return null;
-
-    return label;
-  }
-
-  /// Parse an inline [InlineLink] at the current position.
-  ///
-  /// At this point, we have parsed a link's (or image's) opening `[`, and then
-  /// a matching closing `]`, and [parser.pos] is pointing at an opening `(`.
-  /// This method will then attempt to parse a link destination wrapped in `<>`,
-  /// such as `(<http://url>)`, or a bare link destination, such as
-  /// `(http://url)`, or a link destination with a title, such as
-  /// `(http://url "title")`.
-  ///
-  /// Returns the [InlineLink] if one was parsed, or `null` if not.
-  InlineLink? _parseInlineLink(InlineParser parser) {
-    // Start walking to the character just after the opening `(`.
-    parser.advanceBy(1);
-
-    _moveThroughWhitespace(parser);
-    if (parser.isDone) return null; // EOF. Not a link.
-
-    if (parser.charAt(parser.pos) == $lt) {
-      // Maybe a `<...>`-enclosed link destination.
-      return _parseInlineBracketedLink(parser);
-    } else {
-      return _parseInlineBareDestinationLink(parser);
-    }
-  }
-
-  /// Parse an inline link with a bracketed destination (a destination wrapped
-  /// in `<...>`). The current position of the parser must be the first
-  /// character of the destination.
-  ///
-  /// Returns the link if it was successfully created, `null` otherwise.
-  InlineLink? _parseInlineBracketedLink(InlineParser parser) {
-    parser.advanceBy(1);
-
-    final buffer = StringBuffer();
-    while (true) {
-      final char = parser.charAt(parser.pos);
-      if (char == $backslash) {
-        parser.advanceBy(1);
-        final next = parser.charAt(parser.pos);
-        // TODO: Follow the backslash spec better here.
-        // http://spec.commonmark.org/0.29/#backslash-escapes
-        if (next != $backslash && next != $gt) {
-          buffer.writeCharCode(char);
-        }
-        buffer.writeCharCode(next);
-      } else if (char == $lf || char == $cr || char == $ff) {
-        // Not a link (no line breaks allowed within `<...>`).
-        return null;
-      } else if (char == $space) {
-        buffer.write('%20');
-      } else if (char == $gt) {
-        break;
-      } else {
-        buffer.writeCharCode(char);
-      }
-      parser.advanceBy(1);
-      if (parser.isDone) return null;
-    }
-    final destination = buffer.toString();
-
-    parser.advanceBy(1);
-    final char = parser.charAt(parser.pos);
-    if (char == $space || char == $lf || char == $cr || char == $ff) {
-      final title = _parseTitle(parser);
-      if (title == null && parser.charAt(parser.pos) != $rparen) {
-        // This looked like an inline link, until we found this $space
-        // followed by mystery characters; no longer a link.
-        return null;
-      }
-      return InlineLink(destination, title: title);
-    } else if (char == $rparen) {
-      return InlineLink(destination);
-    } else {
-      // We parsed something like `[foo](<url>X`. Not a link.
-      return null;
     }
   }
 
@@ -1158,15 +947,123 @@ class LinkSyntax extends TagSyntax {
     }
   }
 
-  // Walk the parser forward through any whitespace.
-  void _moveThroughWhitespace(InlineParser parser) {
-    while (!parser.isDone) {
+  // Tries to create an inline link node.
+  //
+  /// Parse an inline link with a bracketed destination (a destination wrapped
+  /// in `<...>`). The current position of the parser must be the first
+  /// character of the destination.
+  ///
+  /// Returns the link if it was successfully created, `null` otherwise.
+  InlineLink? _parseInlineBracketedLink(InlineParser parser) {
+    parser.advanceBy(1);
+
+    final buffer = StringBuffer();
+    while (true) {
       final char = parser.charAt(parser.pos);
-      if (char != $space && char != $tab && char != $lf && char != $vt && char != $cr && char != $ff) {
-        return;
+      if (char == $backslash) {
+        parser.advanceBy(1);
+        final next = parser.charAt(parser.pos);
+        // TODO: Follow the backslash spec better here.
+        // http://spec.commonmark.org/0.29/#backslash-escapes
+        if (next != $backslash && next != $gt) {
+          buffer.writeCharCode(char);
+        }
+        buffer.writeCharCode(next);
+      } else if (char == $lf || char == $cr || char == $ff) {
+        // Not a link (no line breaks allowed within `<...>`).
+        return null;
+      } else if (char == $space) {
+        buffer.write('%20');
+      } else if (char == $gt) {
+        break;
+      } else {
+        buffer.writeCharCode(char);
       }
       parser.advanceBy(1);
+      if (parser.isDone) return null;
     }
+    final destination = buffer.toString();
+
+    parser.advanceBy(1);
+    final char = parser.charAt(parser.pos);
+    if (char == $space || char == $lf || char == $cr || char == $ff) {
+      final title = _parseTitle(parser);
+      if (title == null && parser.charAt(parser.pos) != $rparen) {
+        // This looked like an inline link, until we found this $space
+        // followed by mystery characters; no longer a link.
+        return null;
+      }
+      return InlineLink(destination, title: title);
+    } else if (char == $rparen) {
+      return InlineLink(destination);
+    } else {
+      // We parsed something like `[foo](<url>X`. Not a link.
+      return null;
+    }
+  }
+
+  /// Parse an inline [InlineLink] at the current position.
+  ///
+  /// At this point, we have parsed a link's (or image's) opening `[`, and then
+  /// a matching closing `]`, and [parser.pos] is pointing at an opening `(`.
+  /// This method will then attempt to parse a link destination wrapped in `<>`,
+  /// such as `(<http://url>)`, or a bare link destination, such as
+  /// `(http://url)`, or a link destination with a title, such as
+  /// `(http://url "title")`.
+  ///
+  /// Returns the [InlineLink] if one was parsed, or `null` if not.
+  InlineLink? _parseInlineLink(InlineParser parser) {
+    // Start walking to the character just after the opening `(`.
+    parser.advanceBy(1);
+
+    _moveThroughWhitespace(parser);
+    if (parser.isDone) return null; // EOF. Not a link.
+
+    if (parser.charAt(parser.pos) == $lt) {
+      // Maybe a `<...>`-enclosed link destination.
+      return _parseInlineBracketedLink(parser);
+    } else {
+      return _parseInlineBareDestinationLink(parser);
+    }
+  }
+
+  /// Parse a reference link label at the current position.
+  ///
+  /// Specifically, [parser.pos] is expected to be pointing at the `[` which
+  /// opens the link label.
+  ///
+  /// Returns the label if it could be parsed, or `null` if not.
+  String? _parseReferenceLinkLabel(InlineParser parser) {
+    // Walk past the opening `[`.
+    parser.advanceBy(1);
+    if (parser.isDone) return null;
+
+    final buffer = StringBuffer();
+    while (true) {
+      final char = parser.charAt(parser.pos);
+      if (char == $backslash) {
+        parser.advanceBy(1);
+        final next = parser.charAt(parser.pos);
+        if (next != $backslash && next != $rbracket) {
+          buffer.writeCharCode(char);
+        }
+        buffer.writeCharCode(next);
+      } else if (char == $rbracket) {
+        break;
+      } else {
+        buffer.writeCharCode(char);
+      }
+      parser.advanceBy(1);
+      if (parser.isDone) return null;
+      // TODO(srawlins): only check 999 characters, for performance reasons?
+    }
+
+    final label = buffer.toString();
+
+    // A link label must contain at least one non-whitespace character.
+    if (_entirelyWhitespacePattern.hasMatch(label)) return null;
+
+    return label;
   }
 
   /// Parses a link title in [parser] at it's current position. The parser's
@@ -1216,98 +1113,201 @@ class LinkSyntax extends TagSyntax {
     if (parser.charAt(parser.pos) != $rparen) return null;
     return title;
   }
+
+  /// Resolve a possible reference link.
+  ///
+  /// Uses [linkReferences], [linkResolver], and [_createNode] to try to
+  /// resolve [label] into a [MarkedNode]. If [label] is defined in
+  /// [linkReferences] or can be resolved by [linkResolver], returns a [MarkedNode]
+  /// that links to the resolved URL.
+  ///
+  /// Otherwise, returns `null`.
+  ///
+  /// [label] does not need to be normalized.
+  MarkedNode? _resolveReferenceLink(String label, Map<String, LinkReference> linkReferences,
+      {List<MarkedNode> Function()? getChildren}) {
+    final linkReference = linkReferences[normalizeLinkLabel(label)];
+    if (linkReference != null) {
+      return _createNode(linkReference.destination, linkReference.title, getChildren: getChildren!);
+    } else {
+      // This link has no reference definition. But we allow users of the
+      // library to specify a custom resolver function ([linkResolver]) that
+      // may choose to handle this. Otherwise, it's just treated as plain
+      // text.
+
+      // Normally, label text does not get parsed as inline Markdown. However,
+      // for the benefit of the link resolver, we need to at least escape
+      // brackets, so that, e.g. a link resolver can receive `[\[\]]` as `[]`.
+      final resolved = linkResolver(label.replaceAll(r'\\', r'\').replaceAll(r'\[', '[').replaceAll(r'\]', ']'));
+      if (resolved != null) {
+        getChildren!();
+      }
+      return resolved;
+    }
+  }
+
+  /// Returns the link if it was successfully created, `null` otherwise.
+  MarkedNode _tryCreateInlineLink(InlineParser parser, InlineLink link,
+      {required List<MarkedNode> Function() getChildren}) {
+    return _createNode(link.destination, link.title, getChildren: getChildren);
+  }
+
+  /// Tries to create a reference link node.
+  ///
+  /// Returns the link if it was successfully created, `null` otherwise.
+  MarkedNode? _tryCreateReferenceLink(InlineParser parser, String label,
+      {required List<MarkedNode> Function() getChildren}) {
+    return _resolveReferenceLink(label, parser.document.linkReferences, getChildren: getChildren);
+  }
 }
 
-/// Matches images like `![alternate text](url "optional title")` and
-/// `![alternate text][label]`.
-// class ImageSyntax extends LinkSyntax {
-//   ImageSyntax({Resolver? linkResolver})
-//       : super(linkResolver: linkResolver, pattern: r'!\[', startCharacter: $exclamation);
-
-//   @override
-//   MarkedElement _createNode(String destination, String? title, {required List<MarkedNode> Function() getChildren}) {
-//    final element = MarkedElement.empty('img');
-//    final children = getChildren();
-//     element.attributes['src'] = destination;
-//     element.attributes['alt'] = children.map((node) => node.textContent).join();
-//     if (title != null && title.isNotEmpty) {
-//       element.attributes['title'] = escapeAttribute(title.replaceAll('&', '&amp;'));
-//     }
-//     return element;
-//   }
-// }
-
-/// Matches backtick-enclosed inline code blocks.
-class CodeSyntax extends InlineSyntax {
-  // This pattern matches:
-  //
-  // * a string of backticks (not followed by any more), followed by
-  // * a non-greedy string of anything, including newlines, ending with anything
-  //   except a backtick, followed by
-  // * a string of backticks the same length as the first, not followed by any
-  //   more.
-  //
-  // This conforms to the delimiters of inline code, both in Markdown.pl, and
-  // CommonMark.
-  static const String _pattern = r'(`+(?!`))((?:.|\n)*?[^`])\1(?!`)';
-
-  CodeSyntax() : super(_pattern);
+/// A simple delimiter implements the [Delimiter] interface with basic fields,
+/// and does not have the concept of "left-flanking" or "right-flanking".
+class SimpleDelimiter implements Delimiter {
+  @override
+  MarkedText node;
 
   @override
-  bool tryMatch(InlineParser parser, [int? startMatchPos]) {
-    if (parser.pos > 0 && parser.charAt(parser.pos - 1) == $backquote) {
-      // Not really a match! We can't just sneak past one backtick to try the
-      // next character. An example of this situation would be:
-      //
-      //     before ``` and `` after.
-      //             ^--parser.pos
-      return false;
-    }
+  final int char;
 
-    final match = pattern.matchAsPrefix(parser.source, parser.pos);
-    if (match == null) {
-      return false;
-    }
-    parser.writeText();
-    if (onMatch(parser, match)) parser.consume(match.match.length);
-    return true;
+  @override
+  final int length;
+
+  @override
+  bool isActive;
+
+  @override
+  final bool canOpen;
+
+  @override
+  final bool canClose;
+
+  @override
+  final TagSyntax syntax;
+
+  final int endPos;
+
+  SimpleDelimiter(
+      {required this.node,
+      required this.char,
+      required this.length,
+      required this.canOpen,
+      required this.canClose,
+      required this.syntax,
+      required this.endPos})
+      : isActive = true;
+}
+
+/// Matches strikethrough syntax according to the GFM spec.
+class StrikethroughSyntax extends TagSyntax {
+  StrikethroughSyntax() : super('~+', requiresDelimiterRun: true, allowIntraWord: true);
+
+  @override
+  MarkedNode close(InlineParser parser, Delimiter opener, Delimiter closer,
+      {required List<MarkedNode> Function() getChildren}) {
+    return MarkedElement('del', getChildren());
+  }
+}
+
+/// Matches syntax that has a pair of tags and becomes an element, like `*` for
+/// `<em>`. Allows nested tags.
+class TagSyntax extends InlineSyntax {
+  /// Whether this is parsed according to the same nesting rules as [emphasis
+  /// delimiters][].
+  ///
+  /// [emphasis delimiters]: http://spec.commonmark.org/0.28/#can-open-emphasis
+  final bool requiresDelimiterRun;
+
+  /// Whether to allow intra-word delimiter runs. CommonMark emphasis and
+  /// strong emphasis does not allow this, but GitHub-Flavored Markdown allows
+  /// it on strikethrough.
+  final bool allowIntraWord;
+
+  /// Create a new [TagSyntax] which matches text on [pattern].
+  ///
+  /// If [end] is passed, it is used as the pattern which denotes the end of
+  /// matching text. Otherwise, [pattern] is used. If [requiresDelimiterRun] is
+  /// passed, this syntax parses according to the same nesting rules as
+  /// emphasis delimiters.  If [startCharacter] is passed, it is used as a
+  /// pre-matching check which is faster than matching against [pattern].
+  TagSyntax(String pattern, {this.requiresDelimiterRun = false, int? startCharacter, this.allowIntraWord = false})
+      : super(pattern, startCharacter: startCharacter);
+
+  /// Attempts to close this tag at the current position.
+  ///
+  /// If a tag cannot be closed at the current position (for example, if a link
+  /// reference cannot be found for a link tag's label), then `null` is
+  /// returned.
+  ///
+  /// If a tag can be closed at the current position, then this method calls
+  /// [getChildren], in which [parser] parses any nested text into child nodes.
+  /// The returned [MarkedNode] incorpororates these child nodes.
+  MarkedNode? close(InlineParser parser, Delimiter opener, Delimiter closer,
+      {required List<MarkedNode> Function() getChildren}) {
+    final strong = opener.length >= 2 && closer.length >= 2;
+    return MarkedElement(strong ? 'strong' : 'em', getChildren());
   }
 
   @override
   bool onMatch(InlineParser parser, Match match) {
-    parser.addNode(MarkedElement.text('code', match[2]!.trim().replaceAll('\n', ' ')));
+    final runLength = match.group(0)!.length;
+    final matchStart = parser.pos;
+    final matchEnd = parser.pos + runLength;
+    final text = MarkedText(parser.source.substring(matchStart, matchEnd));
+    if (!requiresDelimiterRun) {
+      parser._pushDelimiter(SimpleDelimiter(
+          node: text,
+          length: runLength,
+          char: parser.source.codeUnitAt(matchStart),
+          canOpen: true,
+          canClose: false,
+          syntax: this,
+          endPos: matchEnd));
+      parser.addNode(text);
+      return true;
+    }
 
-    return true;
-  }
-}
-
-/// Matches GitHub Markdown emoji syntax like `:smile:`.
-///
-/// There is no formal specification of GitHub's support for this colon-based
-/// emoji support, so this syntax is based on the results of Markdown-enabled
-/// text fields at github.com.
-class EmojiSyntax extends InlineSyntax {
-  // Emoji "aliases" are mostly limited to lower-case letters, numbers, and
-  // underscores, but GitHub also supports `:+1:` and `:-1:`.
-  EmojiSyntax() : super(':([a-z0-9_+-]+):');
-
-  @override
-  bool onMatch(InlineParser parser, Match match) {
-    final alias = match[1]!;
-    final emoji = emojis[alias];
-    if (emoji == null) {
-      parser.advanceBy(1);
+    final delimiterRun =
+        DelimiterRun.tryParse(parser, matchStart, matchEnd, syntax: this, node: text, allowIntraWord: allowIntraWord);
+    if (delimiterRun != null) {
+      parser._pushDelimiter(delimiterRun);
+      parser.addNode(text);
+      return true;
+    } else {
+      parser.advanceBy(runLength);
       return false;
     }
-    parser.addNode(MarkedText(emoji));
-
-    return true;
   }
 }
 
-class InlineLink {
-  final String destination;
-  final String? title;
+/// Matches stuff that should just be passed through as straight text.
+class TextSyntax extends InlineSyntax {
+  final String substitute;
 
-  InlineLink(this.destination, {this.title});
+  /// Create a new [TextSyntax] which matches text on [pattern].
+  ///
+  /// If [sub] is passed, it is used as a simple replacement for [pattern]. If
+  /// [startCharacter] is passed, it is used as a pre-matching check which is
+  /// faster than matching against [pattern].
+  TextSyntax(String pattern, {String sub = '', int? startCharacter})
+      : substitute = sub,
+        super(pattern, startCharacter: startCharacter);
+
+  /// Adds a [Text] node to [parser] and returns `true` if there is a
+  /// [substitute], as long as the preceding character (if any) is not a `/`.
+  ///
+  /// Otherwise, the parser is advanced by the length of [match] and `false` is
+  /// returned.
+  @override
+  bool onMatch(InlineParser parser, Match match) {
+    if (substitute.isEmpty || (match.start > 0 && match.input.substring(match.start - 1, match.start) == '/')) {
+      // Just use the original matched text.
+      parser.advanceBy(match.match.length);
+      return false;
+    }
+
+    // Insert the substitution.
+    parser.addNode(MarkedText(substitute));
+    return true;
+  }
 }

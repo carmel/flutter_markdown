@@ -234,10 +234,10 @@ Automatic URL Linking: https://www.npmjs.com/package/vue3-markdown
             ],
           ),
           initialScrollOffset: 30, // means 30%
-          notifyHandler: (maxScrollExtent, offset, index) {
+          notifyHandler: (maxScrollExtent, offset) {
             print('max>>>>>>>>$maxScrollExtent, offset>>>>>>>>$offset');
             print('reading>>>>>>>>>>>>> ${(offset * 100 / maxScrollExtent).round()}%');
-            print('reading index>>>>>>>>>>>>> $index');
+            // print('reading index>>>>>>>>>>>>> $index');
           },
           styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
             textScaleFactor: 1.3,

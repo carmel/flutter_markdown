@@ -6,11 +6,8 @@ import 'dart:convert';
 
 import 'package:charcode/charcode.dart';
 
-String escapeHtml(String html) =>
-    const HtmlEscape(HtmlEscapeMode.element).convert(html);
-
-String escapeHtmlAttribute(String text) =>
-    const HtmlEscape(HtmlEscapeMode.attribute).convert(text);
+/// One or more whitespace, for compressing.
+final _oneOrMoreWhitespacePattern = RegExp('[ \n\r\t]+');
 
 /// Escapes the contents of [value], so that it may be used as an HTML
 /// attribute.
@@ -78,14 +75,14 @@ String escapeAttribute(String value) {
   return result.toString();
 }
 
-/// One or more whitespace, for compressing.
-final _oneOrMoreWhitespacePattern = RegExp('[ \n\r\t]+');
+String escapeHtml(String html) => const HtmlEscape(HtmlEscapeMode.element).convert(html);
+
+String escapeHtmlAttribute(String text) => const HtmlEscape(HtmlEscapeMode.attribute).convert(text);
 
 /// "Normalizes" a link label, according to the [CommonMark spec].
 ///
 /// [CommonMark spec] https://spec.commonmark.org/0.29/#link-label
-String normalizeLinkLabel(String label) =>
-    label.trim().replaceAll(_oneOrMoreWhitespacePattern, ' ').toLowerCase();
+String normalizeLinkLabel(String label) => label.trim().replaceAll(_oneOrMoreWhitespacePattern, ' ').toLowerCase();
 
 extension MatchExtensions on Match {
   /// Returns the whole match String

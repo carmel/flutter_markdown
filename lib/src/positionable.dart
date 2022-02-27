@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'parser/block_parser.dart' show BlockSyntax;
+import 'parser/extension_set.dart' show ExtensionSet;
 import 'parser/inline_parser.dart';
 import 'scroll_to.dart' show AutoScrollController;
 import 'style_sheet.dart' show MarkdownStyleSheet;
@@ -14,10 +16,11 @@ import 'widget.dart'
         MarkdownBulletBuilder,
         MarkdownElementBuilder,
         MarkdownListItemCrossAxisAlignment;
-import 'parser/block_parser.dart' show BlockSyntax;
-import 'parser/extension_set.dart' show ExtensionSet;
 
 class PositionableMarkdown extends Markdown {
+  final SliverAppBar appbar;
+
+  final void Function(double, double) notifyHandler;
   PositionableMarkdown({
     Key? key,
     required this.appbar,
@@ -60,9 +63,6 @@ class PositionableMarkdown extends Markdown {
           bulletBuilder: bulletBuilder,
         );
 
-  final SliverAppBar appbar;
-  final void Function(double, double, int) notifyHandler;
-
   @override
   Widget build(BuildContext context, List<Widget>? children) {
     return NotificationListener<ScrollNotification>(
@@ -90,29 +90,28 @@ class PositionableMarkdown extends Markdown {
         //   }
         // }
         if (notification is ScrollEndNotification) {
-          final len = super.widgetHeight.length;
+          // final len = super.widgetHeight.length;
           final offset = notification.metrics.pixels;
           final max = notification.metrics.maxScrollExtent;
 
-          int index = 0;
+          // int index = 0;
 
-          if (offset > max) {
-            index = len;
-          } else {
-            var height = .0;
-            for (var i = 0; i < len; i++) {
-              height += super.widgetHeight[i];
-              if (offset <= height) {
-                index = i + 1;
-                break;
-              }
-            }
-          }
+          // if (offset > max) {
+          //   index = len;
+          // } else {
+          //   var height = .0;
+          //   for (var i = 0; i < len; i++) {
+          //     // height += super.widgetHeight[i];
+          //     if (offset <= height) {
+          //       index = i + 1;
+          //       break;
+          //     }
+          //   }
+          // }
 
           notifyHandler(
             max,
             offset,
-            index,
           );
         }
         return false;

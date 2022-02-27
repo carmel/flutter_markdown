@@ -11,9 +11,6 @@ import 'package:flutter/widgets.dart';
 import 'style_sheet.dart';
 import 'widget.dart';
 
-/// Type for a function that creates image widgets.
-typedef ImageBuilder = Widget Function(Uri uri, String? imageDirectory, double? width, double? height);
-
 /// A default image builder handling http/https, resource, data, and file URLs.
 // ignore: prefer_function_declarations_over_variables
 final ImageBuilder kDefaultImageBuilder = (
@@ -52,3 +49,6 @@ final MarkdownStyleSheet Function(BuildContext, MarkdownStyleSheetBaseTheme?)
     textScaleFactor: MediaQuery.textScaleFactorOf(context),
   );
 };
+
+/// Type for a function that creates image widgets.
+typedef ImageBuilder = Widget Function(Uri uri, String? imageDirectory, double? width, double? height);

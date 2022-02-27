@@ -4,15 +4,6 @@
 
 typedef Resolver = MarkedNode? Function(String name, [String? title]);
 
-/// Base class for any AST item.
-///
-/// Roughly corresponds to MarkedNode in the DOM. Will be either an MarkedElement or Text.
-abstract class MarkedNode {
-  void accept(NodeVisitor visitor);
-
-  String get textContent;
-}
-
 /// A named tag that can contain other nodes.
 class MarkedElement implements MarkedNode {
   final String tag;
@@ -28,18 +19,23 @@ class MarkedElement implements MarkedNode {
       : children = null,
         attributes = {};
 
-  /// Instantiates a [tag] MarkedElement with no [children].
-  MarkedElement.withTag(this.tag)
-      : children = [],
-        attributes = {};
-
   /// Instantiates a [tag] MarkedElement with a single Text child.
   MarkedElement.text(this.tag, String text)
       : children = [MarkedText(text)],
         attributes = {};
 
+  /// Instantiates a [tag] MarkedElement with no [children].
+  MarkedElement.withTag(this.tag)
+      : children = [],
+        attributes = {};
+
   /// Whether this element is self-closing.
   bool get isEmpty => children == null;
+
+  @override
+  String get textContent {
+    return (children ?? []).map((MarkedNode? child) => child!.textContent).join('');
+  }
 
   @override
   void accept(NodeVisitor visitor) {
@@ -52,11 +48,15 @@ class MarkedElement implements MarkedNode {
       visitor.visitElementAfter(this);
     }
   }
+}
 
-  @override
-  String get textContent {
-    return (children ?? []).map((MarkedNode? child) => child!.textContent).join('');
-  }
+/// Base class for any AST item.
+///
+/// Roughly corresponds to MarkedNode in the DOM. Will be either an MarkedElement or Text.
+abstract class MarkedNode {
+  String get textContent;
+
+  void accept(NodeVisitor visitor);
 }
 
 /// A plain text element.
@@ -66,10 +66,30 @@ class MarkedText implements MarkedNode {
   MarkedText(this.text);
 
   @override
-  void accept(NodeVisitor visitor) => visitor.visitText(this);
+  String get textContent => text;
 
   @override
-  String get textContent => text;
+  void accept(NodeVisitor visitor) => visitor.visitText(this);
+}
+
+/// Visitor pattern for the AST.
+///
+/// Renderers or other AST transformers should implement this.
+abstract class NodeVisitor {
+  /// Called when an MarkedElement has been reached, after its children have been
+  /// visited.
+  ///
+  /// Will not be called if [visitElementBefore] returns `false`.
+  void visitElementAfter(MarkedElement element);
+
+  /// Called when an MarkedElement has been reached, before its children have been
+  /// visited.
+  ///
+  /// Returns `false` to skip its children.
+  bool visitElementBefore(MarkedElement element);
+
+  /// Called when a Text node has been reached.
+  void visitText(MarkedText text);
 }
 
 /// Inline content that has not been parsed into inline nodes (strong, links,
@@ -86,24 +106,4 @@ class UnparsedContent implements MarkedNode {
 
   @override
   void accept(NodeVisitor visitor) {}
-}
-
-/// Visitor pattern for the AST.
-///
-/// Renderers or other AST transformers should implement this.
-abstract class NodeVisitor {
-  /// Called when a Text node has been reached.
-  void visitText(MarkedText text);
-
-  /// Called when an MarkedElement has been reached, before its children have been
-  /// visited.
-  ///
-  /// Returns `false` to skip its children.
-  bool visitElementBefore(MarkedElement element);
-
-  /// Called when an MarkedElement has been reached, after its children have been
-  /// visited.
-  ///
-  /// Will not be called if [visitElementBefore] returns `false`.
-  void visitElementAfter(MarkedElement element);
 }

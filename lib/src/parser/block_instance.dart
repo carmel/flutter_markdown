@@ -5,11 +5,18 @@ import 'block_parser.dart';
 import 'document.dart';
 import 'util.dart';
 
+/// The line starts with `>` with one optional space after.
+final _blockquotePattern = RegExp(r'^[ ]{0,3}>[ ]?(.*)$');
+
+/// Fenced code block.
+final _codeFencePattern = RegExp(r'^[ ]{0,3}(`{3,}|~{3,})(.*)$');
+
+/// A pattern which should never be used. It just satisfies non-nullability of
+/// pattern fields.
+final _dummyPattern = RegExp('');
+
 /// The line contains only whitespace or is empty.
 final _emptyPattern = RegExp(r'^(?:[ \t]*)$');
-
-/// A series of `=` or `-` (on the next line) define setext-style headers.
-final _setextPattern = RegExp(r'^[ ]{0,3}(=+|-+)\s*$');
 
 /// Leading (and trailing) `#` define atx-style headers.
 ///
@@ -17,21 +24,22 @@ final _setextPattern = RegExp(r'^[ ]{0,3}(=+|-+)\s*$');
 /// non-space character. Line may end with any number of `#` characters,.
 final _headerPattern = RegExp(r'^ {0,3}(#{1,6})[ \x09\x0b\x0c](.*?)#*$');
 
-final _imgPattern = RegExp(r'^\!\[(\S*?)\]\((\S+?)\)$');
-
-/// The line starts with `>` with one optional space after.
-final _blockquotePattern = RegExp(r'^[ ]{0,3}>[ ]?(.*)$');
-
-/// A line indented four spaces. Used for code blocks and lists.
-final _indentPattern = RegExp(r'^(?:    | {0,3}\t)(.*)$');
-
-/// Fenced code block.
-final _codeFencePattern = RegExp(r'^[ ]{0,3}(`{3,}|~{3,})(.*)$');
-
 /// Three or more hyphens, asterisks or underscores by themselves. Note that
 /// a line like `----` is valid as both HR and SETEXT. In case of a tie,
 /// SETEXT should win.
 final _hrPattern = RegExp(r'^ {0,3}([-*_])[ \t]*\1[ \t]*\1(?:\1|[ \t])*$');
+
+final _imgPattern = RegExp(r'^\!\[(\S*?)\]\((\S+?)\)$');
+
+/// A line indented four spaces. Used for code blocks and lists.
+final _indentPattern = RegExp(r'^(?:    | {0,3}\t)(.*)$');
+
+/// A line starting with a number like `123.`. May have up to three leading
+/// spaces before the marker and any number of spaces or tabs after.
+final _olPattern = RegExp(r'^([ ]{0,3})(\d{1,9})([\.)])(([ \t])([ \t]*)(.*))?$');
+
+/// A series of `=` or `-` (on the next line) define setext-style headers.
+final _setextPattern = RegExp(r'^[ ]{0,3}(=+|-+)\s*$');
 
 /// A line starting with one of these markers: `-`, `*`, `+`. May have up to
 /// three leading spaces before the marker and any number of spaces or tabs
@@ -42,161 +50,22 @@ final _hrPattern = RegExp(r'^ {0,3}([-*_])[ \t]*\1[ \t]*\1(?:\1|[ \t])*$');
 /// the list marker.
 final _ulPattern = RegExp(r'^([ ]{0,3})()([*+-])(([ \t])([ \t]*)(.*))?$');
 
-/// A line starting with a number like `123.`. May have up to three leading
-/// spaces before the marker and any number of spaces or tabs after.
-final _olPattern = RegExp(r'^([ ]{0,3})(\d{1,9})([\.)])(([ \t])([ \t]*)(.*))?$');
-
-/// A pattern which should never be used. It just satisfies non-nullability of
-/// pattern fields.
-final _dummyPattern = RegExp('');
-
-class EmptyBlockSyntax extends BlockSyntax {
-  @override
-  RegExp get pattern => _emptyPattern;
-
-  const EmptyBlockSyntax();
-
-  @override
-  MarkedNode? parse(BlockParser parser) {
-    parser.encounteredBlankLine = true;
-    parser.advance();
-
-    // Don't actually emit anything.
-    return null;
-  }
-}
-
-/// Parses setext-style headers.
-class SetextHeaderSyntax extends BlockSyntax {
-  @override
-  RegExp get pattern => _dummyPattern;
-
-  const SetextHeaderSyntax();
-
-  @override
-  bool canParse(BlockParser parser) {
-    if (!_interperableAsParagraph(parser.current)) return false;
-    var i = 1;
-    while (true) {
-      final nextLine = parser.peek(i);
-      if (nextLine == null) {
-        // We never reached an underline.
-        return false;
-      }
-      if (_setextPattern.hasMatch(nextLine)) {
-        return true;
-      }
-      // Ensure that we're still in something like paragraph text.
-      if (!_interperableAsParagraph(nextLine)) {
-        return false;
-      }
-      i++;
-    }
-  }
-
-  @override
-  MarkedNode parse(BlockParser parser) {
-    final lines = <String>[];
-    String? tag;
-    while (!parser.isDone) {
-      final match = _setextPattern.firstMatch(parser.current);
-      if (match == null) {
-        // More text.
-        lines.add(parser.current);
-        parser.advance();
-        continue;
-      } else {
-        // The underline.
-        tag = (match[1]![0] == '=') ? 'h1' : 'h2';
-        parser.advance();
-        break;
-      }
-    }
-
-    final contents = UnparsedContent(lines.join('\n').trimRight());
-
-    return MarkedElement(tag!, [contents]);
-  }
-
-  bool _interperableAsParagraph(String line) => !(_indentPattern.hasMatch(line) ||
-      _codeFencePattern.hasMatch(line) ||
-      _headerPattern.hasMatch(line) ||
-      _blockquotePattern.hasMatch(line) ||
-      _hrPattern.hasMatch(line) ||
-      _ulPattern.hasMatch(line) ||
-      _olPattern.hasMatch(line) ||
-      _emptyPattern.hasMatch(line));
-}
-
-/// Parses setext-style headers, and adds generated IDs to the generated
-/// elements.
-class SetextHeaderWithIdSyntax extends SetextHeaderSyntax {
-  const SetextHeaderWithIdSyntax();
-
-  @override
-  MarkedNode parse(BlockParser parser) {
-    final element = super.parse(parser) as MarkedElement;
-    element.generatedId = BlockSyntax.generateAnchorHash(element);
-    return element;
-  }
-}
-
-class ImageSyntax extends BlockSyntax {
-  @override
-  RegExp get pattern => _imgPattern;
-
-  const ImageSyntax();
-
-  @override
-  MarkedNode parse(BlockParser parser) {
-    final match = pattern.firstMatch(parser.current)!;
-    parser.advance();
-
-    final e = MarkedElement('img', null);
-    e.attributes['url'] = match[2]!;
-
-    if (match[1] != '') {
-      e.attributes['alt'] = match[1]!;
-    }
-    return e;
-  }
-}
-
-/// Parses atx-style headers: `## Header ##`.
-class HeaderSyntax extends BlockSyntax {
-  @override
-  RegExp get pattern => _headerPattern;
-
-  const HeaderSyntax();
-
-  @override
-  MarkedNode parse(BlockParser parser) {
-    final match = pattern.firstMatch(parser.current)!;
-    parser.advance();
-    final level = match[1]!.length;
-    final contents = UnparsedContent(match[2]!.trim());
-    return MarkedElement('h$level', [contents]);
-  }
-}
-
-/// Parses atx-style headers, and adds generated IDs to the generated elements.
-class HeaderWithIdSyntax extends HeaderSyntax {
-  const HeaderWithIdSyntax();
-
-  @override
-  MarkedNode parse(BlockParser parser) {
-    final element = super.parse(parser) as MarkedElement;
-    element.generatedId = BlockSyntax.generateAnchorHash(element);
-    return element;
-  }
-}
-
 /// Parses email-style blockquotes: `> quote`.
 class BlockquoteSyntax extends BlockSyntax {
+  const BlockquoteSyntax();
+
   @override
   RegExp get pattern => _blockquotePattern;
 
-  const BlockquoteSyntax();
+  @override
+  MarkedNode parse(BlockParser parser) {
+    final childLines = parseChildLines(parser);
+
+    // Recursively parse the contents of the blockquote.
+    final children = BlockParser(childLines, parser.document).parseLines();
+
+    return MarkedElement('blockquote', children);
+  }
 
   @override
   List<String> parseChildLines(BlockParser parser) {
@@ -224,27 +93,29 @@ class BlockquoteSyntax extends BlockSyntax {
 
     return childLines;
   }
-
-  @override
-  MarkedNode parse(BlockParser parser) {
-    final childLines = parseChildLines(parser);
-
-    // Recursively parse the contents of the blockquote.
-    final children = BlockParser(childLines, parser.document).parseLines();
-
-    return MarkedElement('blockquote', children);
-  }
 }
 
 /// Parses preformatted code blocks that are indented four spaces.
 class CodeBlockSyntax extends BlockSyntax {
+  const CodeBlockSyntax();
+
   @override
   RegExp get pattern => _indentPattern;
 
   @override
   bool canEndBlock(BlockParser parser) => false;
 
-  const CodeBlockSyntax();
+  @override
+  MarkedNode parse(BlockParser parser) {
+    final childLines = parseChildLines(parser);
+
+    // The Markdown tests expect a trailing newline.
+    childLines.add('');
+
+    final content = childLines.join('\n');
+
+    return MarkedElement('pre', [MarkedElement.text('code', content)]);
+  }
 
   @override
   List<String?> parseChildLines(BlockParser parser) {
@@ -271,17 +142,21 @@ class CodeBlockSyntax extends BlockSyntax {
     }
     return childLines;
   }
+}
+
+class EmptyBlockSyntax extends BlockSyntax {
+  const EmptyBlockSyntax();
 
   @override
-  MarkedNode parse(BlockParser parser) {
-    final childLines = parseChildLines(parser);
+  RegExp get pattern => _emptyPattern;
 
-    // The Markdown tests expect a trailing newline.
-    childLines.add('');
+  @override
+  MarkedNode? parse(BlockParser parser) {
+    parser.encounteredBlankLine = true;
+    parser.advance();
 
-    final content = childLines.join('\n');
-
-    return MarkedElement('pre', [MarkedElement.text('code', content)]);
+    // Don't actually emit anything.
+    return null;
   }
 }
 
@@ -289,10 +164,10 @@ class CodeBlockSyntax extends BlockSyntax {
 ///
 /// See the CommonMark spec: https://spec.commonmark.org/0.29/#fenced-code-blocks
 class FencedCodeBlockSyntax extends BlockSyntax {
+  const FencedCodeBlockSyntax();
+
   @override
   RegExp get pattern => _codeFencePattern;
-
-  const FencedCodeBlockSyntax();
 
   @override
   bool canParse(BlockParser parser) {
@@ -305,27 +180,6 @@ class FencedCodeBlockSyntax extends BlockSyntax {
     // > If the info string comes after a backtick fence, it may not contain
     // > any backtick characters.
     return (codeFence.codeUnitAt(0) != $backquote || !infoString!.codeUnits.contains($backquote));
-  }
-
-  @override
-  List<String> parseChildLines(BlockParser parser, [String? endBlock]) {
-    endBlock ??= '';
-
-    final childLines = <String>[];
-    parser.advance();
-
-    while (!parser.isDone) {
-      final match = pattern.firstMatch(parser.current);
-      if (match == null || !match[1]!.startsWith(endBlock)) {
-        childLines.add(parser.current);
-        parser.advance();
-      } else {
-        parser.advance();
-        break;
-      }
-    }
-
-    return childLines;
   }
 
   @override
@@ -360,19 +214,90 @@ class FencedCodeBlockSyntax extends BlockSyntax {
 
     return element;
   }
+
+  @override
+  List<String> parseChildLines(BlockParser parser, [String? endBlock]) {
+    endBlock ??= '';
+
+    final childLines = <String>[];
+    parser.advance();
+
+    while (!parser.isDone) {
+      final match = pattern.firstMatch(parser.current);
+      if (match == null || !match[1]!.startsWith(endBlock)) {
+        childLines.add(parser.current);
+        parser.advance();
+      } else {
+        parser.advance();
+        break;
+      }
+    }
+
+    return childLines;
+  }
+}
+
+/// Parses atx-style headers: `## Header ##`.
+class HeaderSyntax extends BlockSyntax {
+  const HeaderSyntax();
+
+  @override
+  RegExp get pattern => _headerPattern;
+
+  @override
+  MarkedNode parse(BlockParser parser) {
+    final match = pattern.firstMatch(parser.current)!;
+    parser.advance();
+    final level = match[1]!.length;
+    final contents = UnparsedContent(match[2]!.trim());
+    return MarkedElement('h$level', [contents]);
+  }
+}
+
+/// Parses atx-style headers, and adds generated IDs to the generated elements.
+class HeaderWithIdSyntax extends HeaderSyntax {
+  const HeaderWithIdSyntax();
+
+  @override
+  MarkedNode parse(BlockParser parser) {
+    final element = super.parse(parser) as MarkedElement;
+    element.generatedId = BlockSyntax.generateAnchorHash(element);
+    return element;
+  }
 }
 
 /// Parses horizontal rules like `---`, `_ _ _`, `*  *  *`, etc.
 class HorizontalRuleSyntax extends BlockSyntax {
+  const HorizontalRuleSyntax();
+
   @override
   RegExp get pattern => _hrPattern;
-
-  const HorizontalRuleSyntax();
 
   @override
   MarkedNode parse(BlockParser parser) {
     parser.advance();
     return MarkedElement.empty('hr');
+  }
+}
+
+class ImageSyntax extends BlockSyntax {
+  const ImageSyntax();
+
+  @override
+  RegExp get pattern => _imgPattern;
+
+  @override
+  MarkedNode parse(BlockParser parser) {
+    final match = pattern.firstMatch(parser.current)!;
+    parser.advance();
+
+    final e = MarkedElement('img', null);
+    e.attributes['url'] = match[2]!;
+
+    if (match[1] != '') {
+      e.attributes['alt'] = match[1]!;
+    }
+    return e;
   }
 }
 
@@ -386,6 +311,15 @@ class ListItem {
 
 /// Base class for both ordered and unordered lists.
 abstract class ListSyntax extends BlockSyntax {
+  /// A list of patterns that can start a valid block within a list item.
+  static final blocksInList = [_blockquotePattern, _headerPattern, _hrPattern, _indentPattern, _ulPattern, _olPattern];
+
+  static final _whitespaceRe = RegExp('[ \t]*');
+
+  const ListSyntax();
+
+  String get listTag;
+
   @override
   bool canEndBlock(BlockParser parser) {
     // An empty list cannot interrupt a paragraph. See
@@ -398,15 +332,6 @@ abstract class ListSyntax extends BlockSyntax {
     // after the delimiter.
     return match[7]?.isNotEmpty ?? false;
   }
-
-  String get listTag;
-
-  const ListSyntax();
-
-  /// A list of patterns that can start a valid block within a list item.
-  static final blocksInList = [_blockquotePattern, _headerPattern, _hrPattern, _indentPattern, _ulPattern, _olPattern];
-
-  static final _whitespaceRe = RegExp('[ \t]*');
 
   @override
   MarkedNode parse(BlockParser parser) {
@@ -574,26 +499,15 @@ abstract class ListSyntax extends BlockSyntax {
   }
 }
 
-/// Parses unordered lists.
-class UnorderedListSyntax extends ListSyntax {
-  @override
-  RegExp get pattern => _ulPattern;
-
-  @override
-  String get listTag => 'ul';
-
-  const UnorderedListSyntax();
-}
-
 /// Parses ordered lists.
 class OrderedListSyntax extends ListSyntax {
-  @override
-  RegExp get pattern => _olPattern;
+  const OrderedListSyntax();
 
   @override
   String get listTag => 'ol';
 
-  const OrderedListSyntax();
+  @override
+  RegExp get pattern => _olPattern;
 }
 
 /// Parses paragraphs of regular text.
@@ -602,13 +516,13 @@ class ParagraphSyntax extends BlockSyntax {
 
   static final _whitespacePattern = RegExp(r'^\s*$');
 
+  const ParagraphSyntax();
+
   @override
   RegExp get pattern => _dummyPattern;
 
   @override
   bool canEndBlock(BlockParser parser) => false;
-
-  const ParagraphSyntax();
 
   @override
   bool canParse(BlockParser parser) => true;
@@ -760,4 +674,90 @@ class ParagraphSyntax extends BlockSyntax {
     parser.document.linkReferences.putIfAbsent(label, () => LinkReference(label, destination, title));
     return true;
   }
+}
+
+/// Parses setext-style headers.
+class SetextHeaderSyntax extends BlockSyntax {
+  const SetextHeaderSyntax();
+
+  @override
+  RegExp get pattern => _dummyPattern;
+
+  @override
+  bool canParse(BlockParser parser) {
+    if (!_interperableAsParagraph(parser.current)) return false;
+    var i = 1;
+    while (true) {
+      final nextLine = parser.peek(i);
+      if (nextLine == null) {
+        // We never reached an underline.
+        return false;
+      }
+      if (_setextPattern.hasMatch(nextLine)) {
+        return true;
+      }
+      // Ensure that we're still in something like paragraph text.
+      if (!_interperableAsParagraph(nextLine)) {
+        return false;
+      }
+      i++;
+    }
+  }
+
+  @override
+  MarkedNode parse(BlockParser parser) {
+    final lines = <String>[];
+    String? tag;
+    while (!parser.isDone) {
+      final match = _setextPattern.firstMatch(parser.current);
+      if (match == null) {
+        // More text.
+        lines.add(parser.current);
+        parser.advance();
+        continue;
+      } else {
+        // The underline.
+        tag = (match[1]![0] == '=') ? 'h1' : 'h2';
+        parser.advance();
+        break;
+      }
+    }
+
+    final contents = UnparsedContent(lines.join('\n').trimRight());
+
+    return MarkedElement(tag!, [contents]);
+  }
+
+  bool _interperableAsParagraph(String line) => !(_indentPattern.hasMatch(line) ||
+      _codeFencePattern.hasMatch(line) ||
+      _headerPattern.hasMatch(line) ||
+      _blockquotePattern.hasMatch(line) ||
+      _hrPattern.hasMatch(line) ||
+      _ulPattern.hasMatch(line) ||
+      _olPattern.hasMatch(line) ||
+      _emptyPattern.hasMatch(line));
+}
+
+/// Parses setext-style headers, and adds generated IDs to the generated
+/// elements.
+class SetextHeaderWithIdSyntax extends SetextHeaderSyntax {
+  const SetextHeaderWithIdSyntax();
+
+  @override
+  MarkedNode parse(BlockParser parser) {
+    final element = super.parse(parser) as MarkedElement;
+    element.generatedId = BlockSyntax.generateAnchorHash(element);
+    return element;
+  }
+}
+
+/// Parses unordered lists.
+class UnorderedListSyntax extends ListSyntax {
+  const UnorderedListSyntax();
+
+  @override
+  String get listTag => 'ul';
+
+  @override
+  RegExp get pattern => _ulPattern;
 }

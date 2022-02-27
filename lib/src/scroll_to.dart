@@ -1,37 +1,17 @@
 import 'dart:async';
+
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
+
 import 'scroll_tag.dart' show AutoScrollTagState;
 import 'util.dart' show co;
 
-typedef ViewportBoundaryGetter = Rect Function();
-typedef AxisValueGetter = double Function(Rect rect);
-
-Rect defaultViewportBoundaryGetter() => Rect.zero;
 const defaultScrollDistanceOffset = 100.0;
+Rect defaultViewportBoundaryGetter() => Rect.zero;
 
-enum AutoScrollPosition { begin, middle, end }
-
-class SimpleAutoScrollController extends ScrollController with AutoScrollControllerMixin {
-  @override
-  final ViewportBoundaryGetter viewportBoundaryGetter;
-  @override
-  final AxisValueGetter beginGetter;
-  @override
-  final AxisValueGetter endGetter;
-
-  SimpleAutoScrollController(
-      {bool keepScrollOffset = true,
-      this.viewportBoundaryGetter = defaultViewportBoundaryGetter,
-      required this.beginGetter,
-      required this.endGetter,
-      AutoScrollController? copyTagsFrom,
-      String? debugLabel})
-      : super(keepScrollOffset: keepScrollOffset, debugLabel: debugLabel) {
-    if (copyTagsFrom != null) tagMap.addAll(copyTagsFrom.tagMap);
-  }
-}
+typedef AxisValueGetter = double Function(Rect rect);
+typedef ViewportBoundaryGetter = Rect Function();
 
 abstract class AutoScrollController implements ScrollController {
   factory AutoScrollController(
@@ -51,6 +31,24 @@ abstract class AutoScrollController implements ScrollController {
         debugLabel: debugLabel);
   }
 
+  /// used to choose which direction you are using.
+  /// e.g. axis == Axis.horizontal ? (r) => r.left : (r) => r.top
+  AxisValueGetter get beginGetter;
+
+  AxisValueGetter get endGetter;
+
+  /// check if there is a parent controller
+  bool get hasParentController;
+
+  /// detect if it's in scrolling (scrolling is a async process)
+  bool get isAutoScrolling;
+
+  /// used to chaining parent scroll controller
+  set parentController(ScrollController parentController);
+
+  /// all layout out states will be put into this map
+  Map<int, AutoScrollTagState> get tagMap;
+
   /// used to quick scroll to a index if the row height is the same
   // double? get suggestedRowHeight;
 
@@ -58,54 +56,32 @@ abstract class AutoScrollController implements ScrollController {
   /// e.g. a sticky header which covers the real viewport of a list view
   ViewportBoundaryGetter get viewportBoundaryGetter;
 
-  /// used to choose which direction you are using.
-  /// e.g. axis == Axis.horizontal ? (r) => r.left : (r) => r.top
-  AxisValueGetter get beginGetter;
-  AxisValueGetter get endGetter;
-
-  /// detect if it's in scrolling (scrolling is a async process)
-  bool get isAutoScrolling;
-
-  /// all layout out states will be put into this map
-  Map<int, AutoScrollTagState> get tagMap;
-
-  /// used to chaining parent scroll controller
-  set parentController(ScrollController parentController);
-
-  /// check if there is a parent controller
-  bool get hasParentController;
-
-  /// scroll to the giving index
-  Future scrollToIndex(int index, {AutoScrollPosition? preferPosition});
-
   /// check if the state is created. that is, is the indexed widget is layout out.
   /// NOTE: state created doesn't mean it's in viewport. it could be a buffer range, depending on flutter's implementation.
   bool isIndexStateInLayoutRange(int index);
+
+  /// scroll to the giving index
+  Future scrollToIndex(int index, {AutoScrollPosition? preferPosition});
 }
 
 mixin AutoScrollControllerMixin on ScrollController implements AutoScrollController {
-  @override
-  final Map<int, AutoScrollTagState> tagMap = <int, AutoScrollTagState>{};
+  static const maxBound = 30; // 0.5 second if 60fps
 
   @override
-  ViewportBoundaryGetter get viewportBoundaryGetter;
+  final Map<int, AutoScrollTagState> tagMap = <int, AutoScrollTagState>{};
+  bool __isAutoScrolling = false;
+  ScrollController? _parentController;
+
   @override
   AxisValueGetter get beginGetter;
   @override
   AxisValueGetter get endGetter;
 
-  bool __isAutoScrolling = false;
-  set _isAutoScrolling(bool isAutoScrolling) {
-    __isAutoScrolling = isAutoScrolling;
-    if (!isAutoScrolling && hasClients) {
-      notifyListeners();
-    }
-  }
+  @override
+  bool get hasParentController => _parentController != null;
 
   @override
   bool get isAutoScrolling => __isAutoScrolling;
-
-  ScrollController? _parentController;
   @override
   set parentController(ScrollController parentController) {
     if (_parentController == parentController) return;
@@ -127,7 +103,18 @@ mixin AutoScrollControllerMixin on ScrollController implements AutoScrollControl
   }
 
   @override
-  bool get hasParentController => _parentController != null;
+  ViewportBoundaryGetter get viewportBoundaryGetter;
+
+  set _isAutoScrolling(bool isAutoScrolling) {
+    __isAutoScrolling = isAutoScrolling;
+    if (!isAutoScrolling && hasClients) {
+      notifyListeners();
+    }
+  }
+
+  /// this means there is no widget state existing, usually happened before build.
+  /// we should wait for next frame.
+  bool get _isEmptyStates => tagMap.isEmpty;
 
   @override
   void attach(ScrollPosition position) {
@@ -143,10 +130,124 @@ mixin AutoScrollControllerMixin on ScrollController implements AutoScrollControl
     super.detach(position);
   }
 
-  static const maxBound = 30; // 0.5 second if 60fps
+  @override
+  bool isIndexStateInLayoutRange(int index) => tagMap[index] != null;
+
   @override
   Future scrollToIndex(int index, {AutoScrollPosition? preferPosition}) async {
     return co(this, () => _scrollToIndex(index, preferPosition: preferPosition));
+  }
+
+  AutoScrollPosition _alignmentToPosition(double alignment) => alignment == 0
+      ? AutoScrollPosition.begin
+      : alignment == 1
+          ? AutoScrollPosition.end
+          : AutoScrollPosition.middle;
+
+  /// bring the state node (already created but all of it may not be fully in the viewport) into viewport
+  Future _bringIntoViewportIfNeed(
+      int index, AutoScrollPosition? preferPosition, Future Function(double offset) move) async {
+    if (preferPosition != null) {
+      double targetOffset = _directionalOffsetToRevealInViewport(index, _positionToAlignment(preferPosition));
+
+      // The content preferred position might be impossible to reach
+      // for items close to the edges of the scroll content, e.g.
+      // we cannot put the first item at the end of the viewport or
+      // the last item at the beginning. Trying to do so might lead
+      // to a bounce at either the top or bottom, unless the scroll
+      // physics are set to clamp. To prevent this, we limit the
+      // offset to not overshoot the extent in either direction.
+      targetOffset = targetOffset.clamp(position.minScrollExtent, position.maxScrollExtent);
+
+      await move(targetOffset);
+    } else {
+      final begin = _directionalOffsetToRevealInViewport(index, 0);
+      final end = _directionalOffsetToRevealInViewport(index, 1);
+
+      final alreadyInViewport = offset < begin && offset > end;
+      if (!alreadyInViewport) {
+        double value;
+        if ((end - offset).abs() < (begin - offset).abs()) {
+          value = end;
+        } else {
+          value = begin;
+        }
+
+        await move(value > 0 ? value : 0);
+      }
+    }
+  }
+
+  /// return offset, which is a absolute offset to bring the target index object into the location(depends on [direction]) of viewport
+  /// see also: _offsetYToRevealInViewport()
+  double _directionalOffsetToRevealInViewport(int index, double alignment) {
+    assert(alignment == 0 || alignment == 0.5 || alignment == 1);
+    // 1.0 bottom, 0.5 center, 0.0 begin if list is vertically from begin to end
+    final tagOffsetInViewport = _offsetToRevealInViewport(index, alignment);
+
+    if (tagOffsetInViewport == null) {
+      return -1;
+    } else {
+      double absoluteOffsetToViewport = tagOffsetInViewport.offset;
+      if (alignment == 0.5) {
+        return absoluteOffsetToViewport;
+      } else if (alignment == 0) {
+        return absoluteOffsetToViewport - beginGetter(viewportBoundaryGetter());
+      } else {
+        return absoluteOffsetToViewport + endGetter(viewportBoundaryGetter());
+      }
+    }
+  }
+
+  /// NOTE: this is used to forcase the nearestIndex. if the the index equals targetIndex,
+  /// we will use the function, calling _directionalOffsetToRevealInViewport to get move unit.
+  double? _forecastMoveUnit(int targetIndex, int? currentNearestIndex) {
+    assert(targetIndex != currentNearestIndex);
+    currentNearestIndex = currentNearestIndex ?? 0; //null as none of state
+
+    final alignment = targetIndex > currentNearestIndex ? 1.0 : 0.0;
+    double? absoluteOffsetToViewport;
+
+    if (tagMap[currentNearestIndex] == null) return -1;
+
+    final offsetToLastState = _offsetToRevealInViewport(currentNearestIndex, alignment);
+
+    absoluteOffsetToViewport = offsetToLastState?.offset;
+    absoluteOffsetToViewport ??= defaultScrollDistanceOffset;
+
+    return absoluteOffsetToViewport;
+  }
+
+  int? _getNearestIndex(int index) {
+    final list = tagMap.keys;
+    if (list.isEmpty) return null;
+
+    final sorted = list.toList()..sort((int first, int second) => first.compareTo(second));
+    final min = sorted.first;
+    final max = sorted.last;
+    return (index - min).abs() < (index - max).abs() ? min : max;
+  }
+
+  /// return offset, which is a absolute offset to bring the target index object into the center of the viewport
+  /// see also: _directionalOffsetToRevealInViewport()
+  RevealedOffset? _offsetToRevealInViewport(int index, double alignment) {
+    final ctx = tagMap[index]?.context;
+    if (ctx == null) return null;
+
+    final renderBox = ctx.findRenderObject()!;
+    assert(Scrollable.of(ctx) != null);
+    final RenderAbstractViewport viewport = RenderAbstractViewport.of(renderBox)!;
+    final revealedOffset = viewport.getOffsetToReveal(renderBox, alignment);
+
+    return revealedOffset;
+  }
+
+  double _positionToAlignment(AutoScrollPosition position) {
+    return position == AutoScrollPosition.begin
+        ? 0
+        : position == AutoScrollPosition.end
+            ? 1
+            : 0.5;
   }
 
   Future _scrollToIndex(int index, {AutoScrollPosition? preferPosition}) async {
@@ -238,128 +339,31 @@ mixin AutoScrollControllerMixin on ScrollController implements AutoScrollControl
     return null;
   }
 
-  @override
-  bool isIndexStateInLayoutRange(int index) => tagMap[index] != null;
-
-  /// this means there is no widget state existing, usually happened before build.
-  /// we should wait for next frame.
-  bool get _isEmptyStates => tagMap.isEmpty;
-
   /// wait until the [SchedulerPhase] in [SchedulerPhase.persistentCallbacks].
   /// it means if we do animation scrolling to a position, the Future call back will in [SchedulerPhase.midFrameMicrotasks].
   /// if we want to search viewport element depending on Widget State, we must delay it to [SchedulerPhase.persistentCallbacks].
   /// which is the phase widget build/layout/draw
   Future _waitForWidgetStateBuild() => SchedulerBinding.instance!.endOfFrame;
+}
 
-  /// NOTE: this is used to forcase the nearestIndex. if the the index equals targetIndex,
-  /// we will use the function, calling _directionalOffsetToRevealInViewport to get move unit.
-  double? _forecastMoveUnit(int targetIndex, int? currentNearestIndex) {
-    assert(targetIndex != currentNearestIndex);
-    currentNearestIndex = currentNearestIndex ?? 0; //null as none of state
+enum AutoScrollPosition { begin, middle, end }
 
-    final alignment = targetIndex > currentNearestIndex ? 1.0 : 0.0;
-    double? absoluteOffsetToViewport;
+class SimpleAutoScrollController extends ScrollController with AutoScrollControllerMixin {
+  @override
+  final ViewportBoundaryGetter viewportBoundaryGetter;
+  @override
+  final AxisValueGetter beginGetter;
+  @override
+  final AxisValueGetter endGetter;
 
-    if (tagMap[currentNearestIndex] == null) return -1;
-
-    final offsetToLastState = _offsetToRevealInViewport(currentNearestIndex, alignment);
-
-    absoluteOffsetToViewport = offsetToLastState?.offset;
-    absoluteOffsetToViewport ??= defaultScrollDistanceOffset;
-
-    return absoluteOffsetToViewport;
-  }
-
-  int? _getNearestIndex(int index) {
-    final list = tagMap.keys;
-    if (list.isEmpty) return null;
-
-    final sorted = list.toList()..sort((int first, int second) => first.compareTo(second));
-    final min = sorted.first;
-    final max = sorted.last;
-    return (index - min).abs() < (index - max).abs() ? min : max;
-  }
-
-  /// bring the state node (already created but all of it may not be fully in the viewport) into viewport
-  Future _bringIntoViewportIfNeed(
-      int index, AutoScrollPosition? preferPosition, Future Function(double offset) move) async {
-    if (preferPosition != null) {
-      double targetOffset = _directionalOffsetToRevealInViewport(index, _positionToAlignment(preferPosition));
-
-      // The content preferred position might be impossible to reach
-      // for items close to the edges of the scroll content, e.g.
-      // we cannot put the first item at the end of the viewport or
-      // the last item at the beginning. Trying to do so might lead
-      // to a bounce at either the top or bottom, unless the scroll
-      // physics are set to clamp. To prevent this, we limit the
-      // offset to not overshoot the extent in either direction.
-      targetOffset = targetOffset.clamp(position.minScrollExtent, position.maxScrollExtent);
-
-      await move(targetOffset);
-    } else {
-      final begin = _directionalOffsetToRevealInViewport(index, 0);
-      final end = _directionalOffsetToRevealInViewport(index, 1);
-
-      final alreadyInViewport = offset < begin && offset > end;
-      if (!alreadyInViewport) {
-        double value;
-        if ((end - offset).abs() < (begin - offset).abs()) {
-          value = end;
-        } else {
-          value = begin;
-        }
-
-        await move(value > 0 ? value : 0);
-      }
-    }
-  }
-
-  double _positionToAlignment(AutoScrollPosition position) {
-    return position == AutoScrollPosition.begin
-        ? 0
-        : position == AutoScrollPosition.end
-            ? 1
-            : 0.5;
-  }
-
-  AutoScrollPosition _alignmentToPosition(double alignment) => alignment == 0
-      ? AutoScrollPosition.begin
-      : alignment == 1
-          ? AutoScrollPosition.end
-          : AutoScrollPosition.middle;
-
-  /// return offset, which is a absolute offset to bring the target index object into the location(depends on [direction]) of viewport
-  /// see also: _offsetYToRevealInViewport()
-  double _directionalOffsetToRevealInViewport(int index, double alignment) {
-    assert(alignment == 0 || alignment == 0.5 || alignment == 1);
-    // 1.0 bottom, 0.5 center, 0.0 begin if list is vertically from begin to end
-    final tagOffsetInViewport = _offsetToRevealInViewport(index, alignment);
-
-    if (tagOffsetInViewport == null) {
-      return -1;
-    } else {
-      double absoluteOffsetToViewport = tagOffsetInViewport.offset;
-      if (alignment == 0.5) {
-        return absoluteOffsetToViewport;
-      } else if (alignment == 0) {
-        return absoluteOffsetToViewport - beginGetter(viewportBoundaryGetter());
-      } else {
-        return absoluteOffsetToViewport + endGetter(viewportBoundaryGetter());
-      }
-    }
-  }
-
-  /// return offset, which is a absolute offset to bring the target index object into the center of the viewport
-  /// see also: _directionalOffsetToRevealInViewport()
-  RevealedOffset? _offsetToRevealInViewport(int index, double alignment) {
-    final ctx = tagMap[index]?.context;
-    if (ctx == null) return null;
-
-    final renderBox = ctx.findRenderObject()!;
-    assert(Scrollable.of(ctx) != null);
-    final RenderAbstractViewport viewport = RenderAbstractViewport.of(renderBox)!;
-    final revealedOffset = viewport.getOffsetToReveal(renderBox, alignment);
-
-    return revealedOffset;
+  SimpleAutoScrollController(
+      {bool keepScrollOffset = true,
+      this.viewportBoundaryGetter = defaultViewportBoundaryGetter,
+      required this.beginGetter,
+      required this.endGetter,
+      AutoScrollController? copyTagsFrom,
+      String? debugLabel})
+      : super(keepScrollOffset: keepScrollOffset, debugLabel: debugLabel) {
+    if (copyTagsFrom != null) tagMap.addAll(copyTagsFrom.tagMap);
   }
 }

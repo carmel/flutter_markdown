@@ -1,9 +1,9 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import 'parser/ast.dart';
 import 'style_sheet.dart' show MarkdownStyleSheet;
 import 'widget.dart';
-import 'parser/ast.dart';
 
 const List<String> _kBlockTags = <String>[
   'p',
@@ -28,72 +28,12 @@ bool _isBlockTag(String? tag) => _kBlockTags.contains(tag);
 
 bool _isListTag(String tag) => _kListTags.contains(tag);
 
-class _BlockElement {
-  _BlockElement(this.tag);
-
-  final String? tag;
-  final List<Widget> children = <Widget>[];
-
-  int nextListIndex = 0;
-}
-
-/// A collection of widgets that should be placed adjacent to (inline with)
-/// other inline elements in the same parent block.
-///
-/// Inline elements can be textual (a/em/strong) represented by [RichText]
-/// widgets or images (img) represented by [Image.network] widgets.
-///
-/// Inline elements can be nested within other inline elements, inheriting their
-/// parent's style along with the style of the block they are in.
-///
-/// When laying oufirst, any adjacent RichText widgets are
-/// merged, then, all inline widgets are enclosed in a parent [Wrap] widget.
-class _InlineElement {
-  _InlineElement(this.tag, {this.style});
-
-  final String? tag;
-
-  /// Created by merging the style defined for this element's [tag] in the
-  /// delegate's [MarkdownStyleSheet] with the style of its parent.
-  final TextStyle? style;
-
-  final List<InlineSpan> children = <InlineSpan>[];
-}
-
-/// A delegate used by [MarkdownBuilder] to control the widgets it creates.
-abstract class MarkdownBuilderDelegate {
-  /// Returns a gesture recognizer to use for an `a` element with the given
-  /// text, `href` attribute, and title.
-  GestureRecognizer createLink(String text, String? href, String title);
-
-  /// Returns formatted text to use to display the given contents of a `pre`
-  /// element.
-  ///
-  /// The `styleSheet` is the value of [MarkdownBuilder.styleSheet].
-  TextSpan formatText(MarkdownStyleSheet styleSheet, String code);
-}
-
 /// Builds a [Widget] tree from parsed Markdown.
 ///
 /// See also:
 ///
 ///  * [Markdown], which is a widget that parses and displays Markdown.
 class MarkdownBuilder implements NodeVisitor {
-  /// Creates an object that builds a [Widget] tree from parsed Markdown.
-  MarkdownBuilder({
-    required this.delegate,
-    required this.styleSheet,
-    required this.baseUrl,
-    required this.onTapImage,
-    required this.checkboxBuilder,
-    required this.bulletBuilder,
-    required this.builders,
-    required this.paddingBuilders,
-    required this.listItemCrossAxisAlignment,
-    this.fitContent = false,
-    this.softLineBreak = false,
-  });
-
   /// A delegate that controls how link and `pre` elements behave.
   final MarkdownBuilderDelegate delegate;
 
@@ -104,7 +44,7 @@ class MarkdownBuilder implements NodeVisitor {
   /// Defines which [TextStyle] objects to use for each type of element.
   final MarkdownStyleSheet styleSheet;
 
-//
+  //
   final String baseUrl;
 
   final void Function(String url, String? tag) onTapImage;
@@ -139,12 +79,28 @@ class MarkdownBuilder implements NodeVisitor {
   final bool softLineBreak;
 
   final List<String> _listIndents = <String>[];
+
   final List<_BlockElement> _blocks = <_BlockElement>[];
   final List<_InlineElement> _inlines = <_InlineElement>[];
   final List<GestureRecognizer> _linkHandlers = <GestureRecognizer>[];
   String? _currentBlockTag;
   String? _lastVisitedTag;
   bool _isInBlockquote = false;
+
+  /// Creates an object that builds a [Widget] tree from parsed Markdown.
+  MarkdownBuilder({
+    required this.delegate,
+    required this.styleSheet,
+    required this.baseUrl,
+    required this.onTapImage,
+    required this.checkboxBuilder,
+    required this.bulletBuilder,
+    required this.builders,
+    required this.paddingBuilders,
+    required this.listItemCrossAxisAlignment,
+    this.fitContent = false,
+    this.softLineBreak = false,
+  });
 
   /// Returns widgets that display the given Markdown nodes.
   ///
@@ -168,131 +124,11 @@ class MarkdownBuilder implements NodeVisitor {
     return _blocks.single.children;
   }
 
-  @override
-  bool visitElementBefore(MarkedElement element) {
-    final String tag = element.tag;
-    _currentBlockTag ??= tag;
-    _lastVisitedTag = tag;
-
-    if (builders.containsKey(tag)) {
-      builders[tag]!.visitElementBefore(element);
-    }
-
-    if (paddingBuilders.containsKey(tag)) {
-      paddingBuilders[tag]!.visitElementBefore(element);
-    }
-
-    int? start;
-    if (_isBlockTag(tag)) {
-      _addAnonymousBlockIfNeeded();
-
-      if (_isListTag(tag)) {
-        _listIndents.add(tag);
-      } else {
-        switch (tag) {
-          case 'blockquote':
-            _isInBlockquote = true;
-            break;
-        }
-      }
-      final _BlockElement bElement = _BlockElement(tag);
-      if (start != null) {
-        bElement.nextListIndex = start;
-      }
-      _blocks.add(bElement);
-    } else {
-      if (tag == 'a') {
-        final String? text = extractTextFromElement(element);
-        // Don't add empty links
-        if (text == null) {
-          return false;
-        }
-        final String? destination = element.attributes['href'];
-        final String title = element.attributes['title'] ?? '';
-
-        _linkHandlers.add(
-          delegate.createLink(text, destination, title),
-        );
-      }
-      _addParentInlineIfNeeded(_blocks.last.tag);
-
-      final TextStyle parentStyle = _inlines.last.style!;
-      _inlines.add(_InlineElement(
-        tag,
-        style: parentStyle.merge(styleSheet.styles[tag]),
-      ));
-    }
-
-    return true;
-  }
-
   /// Returns the text, if any, from [element] and its descendants.
   String? extractTextFromElement(MarkedNode element) {
     return element is MarkedElement && (element.children?.isNotEmpty ?? false)
         ? element.children!.map((MarkedNode e) => e is MarkedText ? e.text : extractTextFromElement(e)).join('')
         : (element is MarkedElement && (element.attributes.isNotEmpty) ? element.attributes['alt'] : '');
-  }
-
-  @override
-  void visitText(MarkedText text) {
-    // Don't allow text directly under the root.
-    if (_blocks.last.tag == null) {
-      return;
-    }
-
-    _addParentInlineIfNeeded(_blocks.last.tag);
-
-    // Define trim text function to remove spaces from text elements in
-    // accordance with Markdown specifications.
-    String trimText(String text) {
-      // The leading spaces pattern is used to identify spaces
-      // at the beginning of a line of text.
-      final RegExp _leadingSpacesPattern = RegExp(r'^ *');
-
-      // The soft line break is used to identify the spaces at the end of a line
-      // of text and the leading spaces in the immediately following the line
-      // of text. These spaces are removed in accordance with the Markdown
-      // specification on soft line breaks when lines of text are joined.
-      final RegExp _softLineBreak = RegExp(r' ?\n *');
-
-      // Leading spaces following a hard line break are ignored.
-      // https://github.github.com/gfm/#example-657
-      // Leading spaces in paragraph or list item are ignored
-      // https://github.github.com/gfm/#example-192
-      // https://github.github.com/gfm/#example-236
-      if (const <String>['ul', 'ol', 'p', 'br'].contains(_lastVisitedTag)) {
-        text = text.replaceAll(_leadingSpacesPattern, '');
-      }
-
-      if (softLineBreak) {
-        return text;
-      }
-      return text.replaceAll(_softLineBreak, ' ');
-    }
-
-    InlineSpan? child;
-    if (_blocks.isNotEmpty && builders.containsKey(_blocks.last.tag)) {
-      child = builders[_blocks.last.tag!]!.visitText(text, styleSheet.styles[_blocks.last.tag!])!;
-    } else if (_blocks.last.tag == 'pre') {
-      child = WidgetSpan(
-        child: Scrollbar(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: styleSheet.codeblockPadding,
-            child: _buildRichText(delegate.formatText(styleSheet, text.text)),
-          ),
-        ),
-      );
-    } else {
-      child = TextSpan(
-        style: _isInBlockquote ? styleSheet.blockquote!.merge(_inlines.last.style) : _inlines.last.style,
-        text: _isInBlockquote ? text.text : trimText(text.text),
-        recognizer: _linkHandlers.isNotEmpty ? _linkHandlers.last : null,
-      );
-    }
-    _inlines.last.children.add(child);
-
-    _lastVisitedTag = null;
   }
 
   @override
@@ -421,17 +257,181 @@ class MarkdownBuilder implements NodeVisitor {
     _lastVisitedTag = tag;
   }
 
-  Widget _buildCheckbox(bool checked) {
-    if (checkboxBuilder != null) {
-      return checkboxBuilder!(checked);
+  @override
+  bool visitElementBefore(MarkedElement element) {
+    final String tag = element.tag;
+    _currentBlockTag ??= tag;
+    _lastVisitedTag = tag;
+
+    if (builders.containsKey(tag)) {
+      builders[tag]!.visitElementBefore(element);
     }
-    return _buildPadding(
-        styleSheet.listBulletPadding,
-        Icon(
-          checked ? Icons.check_box : Icons.check_box_outline_blank,
-          size: styleSheet.checkbox!.fontSize,
-          color: styleSheet.checkbox!.color,
-        ));
+
+    if (paddingBuilders.containsKey(tag)) {
+      paddingBuilders[tag]!.visitElementBefore(element);
+    }
+
+    int? start;
+    if (_isBlockTag(tag)) {
+      _addAnonymousBlockIfNeeded();
+
+      if (_isListTag(tag)) {
+        _listIndents.add(tag);
+      } else {
+        switch (tag) {
+          case 'blockquote':
+            _isInBlockquote = true;
+            break;
+        }
+      }
+      final _BlockElement bElement = _BlockElement(tag);
+      if (start != null) {
+        bElement.nextListIndex = start;
+      }
+      _blocks.add(bElement);
+    } else {
+      if (tag == 'a') {
+        final String? text = extractTextFromElement(element);
+        // Don't add empty links
+        if (text == null) {
+          return false;
+        }
+        final String? destination = element.attributes['href'];
+        final String title = element.attributes['title'] ?? '';
+
+        _linkHandlers.add(
+          delegate.createLink(text, destination, title),
+        );
+      }
+      _addParentInlineIfNeeded(_blocks.last.tag);
+
+      final TextStyle parentStyle = _inlines.last.style!;
+      _inlines.add(_InlineElement(
+        tag,
+        style: parentStyle.merge(styleSheet.styles[tag]),
+      ));
+    }
+
+    return true;
+  }
+
+  @override
+  void visitText(MarkedText text) {
+    // Don't allow text directly under the root.
+    if (_blocks.last.tag == null) {
+      return;
+    }
+
+    _addParentInlineIfNeeded(_blocks.last.tag);
+
+    // Define trim text function to remove spaces from text elements in
+    // accordance with Markdown specifications.
+    String trimText(String text) {
+      // The leading spaces pattern is used to identify spaces
+      // at the beginning of a line of text.
+      final RegExp _leadingSpacesPattern = RegExp(r'^ *');
+
+      // The soft line break is used to identify the spaces at the end of a line
+      // of text and the leading spaces in the immediately following the line
+      // of text. These spaces are removed in accordance with the Markdown
+      // specification on soft line breaks when lines of text are joined.
+      final RegExp _softLineBreak = RegExp(r' ?\n *');
+
+      // Leading spaces following a hard line break are ignored.
+      // https://github.github.com/gfm/#example-657
+      // Leading spaces in paragraph or list item are ignored
+      // https://github.github.com/gfm/#example-192
+      // https://github.github.com/gfm/#example-236
+      if (const <String>['ul', 'ol', 'p', 'br'].contains(_lastVisitedTag)) {
+        text = text.replaceAll(_leadingSpacesPattern, '');
+      }
+
+      if (softLineBreak) {
+        return text;
+      }
+      return text.replaceAll(_softLineBreak, ' ');
+    }
+
+    InlineSpan? child;
+    if (_blocks.isNotEmpty && builders.containsKey(_blocks.last.tag)) {
+      child = builders[_blocks.last.tag!]!.visitText(text, styleSheet.styles[_blocks.last.tag!])!;
+    } else if (_blocks.last.tag == 'pre') {
+      child = WidgetSpan(
+        child: Scrollbar(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: styleSheet.codeblockPadding,
+            child: _buildRichText(delegate.formatText(styleSheet, text.text)),
+          ),
+        ),
+      );
+    } else {
+      child = TextSpan(
+        style: _isInBlockquote ? styleSheet.blockquote!.merge(_inlines.last.style) : _inlines.last.style,
+        text: _isInBlockquote ? text.text : trimText(text.text),
+        recognizer: _linkHandlers.isNotEmpty ? _linkHandlers.last : null,
+      );
+    }
+    _inlines.last.children.add(child);
+
+    _lastVisitedTag = null;
+  }
+
+  void _addAnonymousBlockIfNeeded() {
+    if (_inlines.isEmpty) {
+      return;
+    }
+
+    WrapAlignment blockAlignment = WrapAlignment.start;
+    EdgeInsets textPadding = EdgeInsets.zero;
+    if (_isBlockTag(_currentBlockTag)) {
+      blockAlignment = _wrapAlignmentForBlockTag(_currentBlockTag);
+      textPadding = _textPaddingForBlockTag(_currentBlockTag);
+
+      if (paddingBuilders.containsKey(_currentBlockTag)) {
+        textPadding = paddingBuilders[_currentBlockTag]!.getPadding();
+      }
+    }
+
+    final _InlineElement inline = _inlines.single;
+    if (inline.children.isNotEmpty) {
+      // final List<InlineSpan> mergedInlines = inline.children;
+      final Wrap wrap = Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          _buildPadding(
+            textPadding,
+            SelectableText.rich(
+              TextSpan(children: inline.children),
+              textAlign: TextAlign.justify,
+            ),
+          ),
+        ],
+        alignment: blockAlignment,
+      );
+
+      _addBlockChild(wrap);
+
+      _inlines.clear();
+    }
+  }
+
+  void _addBlockChild(Widget child) {
+    final _BlockElement parent = _blocks.last;
+    // if (parent.children.isNotEmpty) {
+    //   parent.children.add(SizedBox(height: styleSheet.blockSpacing));
+    // }
+    parent.children.add(child);
+    parent.nextListIndex += 1;
+  }
+
+  void _addParentInlineIfNeeded(String? tag) {
+    if (_inlines.isEmpty) {
+      _inlines.add(_InlineElement(
+        tag,
+        style: styleSheet.styles[tag!],
+      ));
+    }
   }
 
   Widget _buildBullet(String listTag, String? idx) {
@@ -459,11 +459,25 @@ class MarkdownBuilder implements NodeVisitor {
       styleSheet.listBulletPadding,
       Text(
         // '${index + 1}.',
-        '$idx.',
+        // '$idx.',
+        '$idx. ',
         textAlign: TextAlign.right,
         style: styleSheet.listBullet,
       ),
     );
+  }
+
+  Widget _buildCheckbox(bool checked) {
+    if (checkboxBuilder != null) {
+      return checkboxBuilder!(checked);
+    }
+    return _buildPadding(
+        styleSheet.listBulletPadding,
+        Icon(
+          checked ? Icons.check_box : Icons.check_box_outline_blank,
+          size: styleSheet.checkbox!.fontSize,
+          color: styleSheet.checkbox!.color,
+        ));
   }
 
   Widget _buildPadding(EdgeInsets? padding, Widget child) {
@@ -474,59 +488,38 @@ class MarkdownBuilder implements NodeVisitor {
     return Padding(padding: padding, child: child);
   }
 
-  void _addParentInlineIfNeeded(String? tag) {
-    if (_inlines.isEmpty) {
-      _inlines.add(_InlineElement(
-        tag,
-        style: styleSheet.styles[tag!],
-      ));
-    }
+  Widget _buildRichText(TextSpan? text, {String? key}) {
+    //Adding a unique key prevents the problem of using the same link handler for text spans with the same text
+    final Key k = key == null ? UniqueKey() : Key(key);
+    return SelectableText.rich(
+      text!,
+      textScaleFactor: styleSheet.textScaleFactor,
+      textAlign: TextAlign.justify,
+      key: k,
+    );
   }
 
-  void _addBlockChild(Widget child) {
-    final _BlockElement parent = _blocks.last;
-    // if (parent.children.isNotEmpty) {
-    //   parent.children.add(SizedBox(height: styleSheet.blockSpacing));
-    // }
-    parent.children.add(child);
-    parent.nextListIndex += 1;
-  }
-
-  void _addAnonymousBlockIfNeeded() {
-    if (_inlines.isEmpty) {
-      return;
+  EdgeInsets _textPaddingForBlockTag(String? blockTag) {
+    switch (blockTag) {
+      case 'p':
+        return styleSheet.pPadding!;
+      case 'h1':
+        return styleSheet.h1Padding!;
+      case 'h2':
+        return styleSheet.h2Padding!;
+      case 'h3':
+        return styleSheet.h3Padding!;
+      case 'h4':
+        return styleSheet.h4Padding!;
+      case 'h5':
+        return styleSheet.h5Padding!;
+      case 'h6':
+        return styleSheet.h6Padding!;
+      case 'ol':
+      case 'ul':
+        return styleSheet.listPadding!;
     }
-
-    WrapAlignment blockAlignment = WrapAlignment.start;
-    EdgeInsets textPadding = EdgeInsets.zero;
-    if (_isBlockTag(_currentBlockTag)) {
-      blockAlignment = _wrapAlignmentForBlockTag(_currentBlockTag);
-      textPadding = _textPaddingForBlockTag(_currentBlockTag);
-
-      if (paddingBuilders.containsKey(_currentBlockTag)) {
-        textPadding = paddingBuilders[_currentBlockTag]!.getPadding();
-      }
-    }
-
-    final _InlineElement inline = _inlines.single;
-    if (inline.children.isNotEmpty) {
-      // final List<InlineSpan> mergedInlines = inline.children;
-      final Wrap wrap = Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          _buildPadding(
-              textPadding,
-              SelectableText.rich(
-                TextSpan(children: inline.children),
-              )),
-        ],
-        alignment: blockAlignment,
-      );
-
-      _addBlockChild(wrap);
-
-      _inlines.clear();
-    }
+    return EdgeInsets.zero;
   }
 
   WrapAlignment _wrapAlignmentForBlockTag(String? blockTag) {
@@ -556,38 +549,49 @@ class MarkdownBuilder implements NodeVisitor {
     }
     return WrapAlignment.start;
   }
+}
 
-  EdgeInsets _textPaddingForBlockTag(String? blockTag) {
-    switch (blockTag) {
-      case 'p':
-        return styleSheet.pPadding!;
-      case 'h1':
-        return styleSheet.h1Padding!;
-      case 'h2':
-        return styleSheet.h2Padding!;
-      case 'h3':
-        return styleSheet.h3Padding!;
-      case 'h4':
-        return styleSheet.h4Padding!;
-      case 'h5':
-        return styleSheet.h5Padding!;
-      case 'h6':
-        return styleSheet.h6Padding!;
-      case 'ol':
-      case 'ul':
-        return styleSheet.listPadding!;
-    }
-    return EdgeInsets.zero;
-  }
+/// A delegate used by [MarkdownBuilder] to control the widgets it creates.
+abstract class MarkdownBuilderDelegate {
+  /// Returns a gesture recognizer to use for an `a` element with the given
+  /// text, `href` attribute, and title.
+  GestureRecognizer createLink(String text, String? href, String title);
 
-  Widget _buildRichText(TextSpan? text, {TextAlign? textAlign, String? key}) {
-    //Adding a unique key prevents the problem of using the same link handler for text spans with the same text
-    final Key k = key == null ? UniqueKey() : Key(key);
-    return SelectableText.rich(
-      text!,
-      textScaleFactor: styleSheet.textScaleFactor,
-      textAlign: textAlign ?? TextAlign.start,
-      key: k,
-    );
-  }
+  /// Returns formatted text to use to display the given contents of a `pre`
+  /// element.
+  ///
+  /// The `styleSheet` is the value of [MarkdownBuilder.styleSheet].
+  TextSpan formatText(MarkdownStyleSheet styleSheet, String code);
+}
+
+class _BlockElement {
+  final String? tag;
+
+  final List<Widget> children = <Widget>[];
+  int nextListIndex = 0;
+
+  _BlockElement(this.tag);
+}
+
+/// A collection of widgets that should be placed adjacent to (inline with)
+/// other inline elements in the same parent block.
+///
+/// Inline elements can be textual (a/em/strong) represented by [RichText]
+/// widgets or images (img) represented by [Image.network] widgets.
+///
+/// Inline elements can be nested within other inline elements, inheriting their
+/// parent's style along with the style of the block they are in.
+///
+/// When laying oufirst, any adjacent RichText widgets are
+/// merged, then, all inline widgets are enclosed in a parent [Wrap] widget.
+class _InlineElement {
+  final String? tag;
+
+  /// Created by merging the style defined for this element's [tag] in the
+  /// delegate's [MarkdownStyleSheet] with the style of its parent.
+  final TextStyle? style;
+
+  final List<InlineSpan> children = <InlineSpan>[];
+
+  _InlineElement(this.tag, {this.style});
 }
